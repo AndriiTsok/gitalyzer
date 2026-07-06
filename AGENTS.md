@@ -8,9 +8,9 @@ of every session. Keep it current as the project evolves.
 **Gitalyzer** — an AI-powered terminal tool that analyzes Git commit message quality
 and helps developers write better commit messages.
 
-Status: **Requirements / RFC phase.** No application code exists yet. Product
-requirements live in `docs/product.md` (the PRD). We are turning them into technical
-requirements and design as RFC documents under `docs/rfcs/` before implementation begins.
+Status: **Implementation phase.** All requirements are locked in RFCs 0001–0008 under
+`docs/rfcs/`; product requirements live in `docs/product.md` (the PRD). Code lands
+slice by slice in the order defined by RFC 0008.
 
 ## Language & Toolchain
 
