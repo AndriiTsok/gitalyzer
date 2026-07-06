@@ -8,9 +8,12 @@ of every session. Keep it current as the project evolves.
 **Gitalyzer** — an AI-powered terminal tool that analyzes Git commit message quality
 and helps developers write better commit messages.
 
-Status: **Implementation phase.** All requirements are locked in RFCs 0001–0008 under
-`docs/rfcs/`; product requirements live in `docs/product.md` (the PRD). Code lands
-slice by slice in the order defined by RFC 0008.
+Status: **v1 feature-complete.** All six implementation slices of RFC 0008 have
+landed: both modes (analyze incl. remote `--url`/`--branch`, interactive write),
+providers, configuration, progress/decoration, and the README. Requirements live in
+RFCs 0001–0008 under `docs/rfcs/`; the PRD is `docs/product.md`. Changes must keep
+the full gate green: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
+`cargo test`.
 
 ## Language & Toolchain
 

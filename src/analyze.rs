@@ -235,13 +235,16 @@ pub struct AnalysisReport {
 }
 
 /// Run analysis end-to-end over an already-discovered repository
-/// (RFC 0005 pipeline). `repository` describes provenance for the report.
+/// (RFC 0005 pipeline). `repository` describes provenance for the report;
+/// `on_batch_done` receives `(completed, total)` for progress indication
+/// (RFC 0007 R1).
 pub async fn run(
     repo: &Repo,
     provider: &AnyProvider,
     settings: &Settings,
     from: Option<String>,
     repository: Repository,
+    on_batch_done: impl Fn(usize, usize) + Sync,
 ) -> Result<AnalysisReport, AnalyzeError> {
     let options = HistoryOptions {
         from: from.clone(),
@@ -260,6 +263,9 @@ pub async fn run(
     );
 
     let concurrency = usize::try_from(settings.analyze.concurrency.max(1)).expect("u32 fits");
+    let completed = std::sync::atomic::AtomicUsize::new(0);
+    let completed = &completed;
+    let on_batch_done = &on_batch_done;
     let critiques: Vec<Vec<CommitCritique>> = stream::iter(batches.iter().enumerate())
         .map(|(index, batch)| async move {
             let user = batch_prompt(batch);
@@ -269,9 +275,18 @@ pub async fn run(
                 size = batch.len(),
                 "critiquing batch"
             );
-            run_task::<BatchCritique>(provider, TASK_NAME, TASK_DESCRIPTION, SYSTEM_PROMPT, &user)
-                .await
-                .map(|result| result.critiques)
+            let result = run_task::<BatchCritique>(
+                provider,
+                TASK_NAME,
+                TASK_DESCRIPTION,
+                SYSTEM_PROMPT,
+                &user,
+            )
+            .await
+            .map(|result| result.critiques);
+            let done = completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            on_batch_done(done, batch_count);
+            result
         })
         .buffer_unordered(concurrency)
         // RFC 0005 R10: fail fast — the first batch error aborts the run.

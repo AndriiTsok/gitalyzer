@@ -59,6 +59,11 @@ impl Repo {
         Ok(Self { inner })
     }
 
+    /// Wrap an already-opened gitoxide repository (remote clones).
+    pub(crate) fn from_gix(inner: gix::Repository) -> Self {
+        Self { inner }
+    }
+
     /// Access the underlying gitoxide repository (used by sibling modules).
     pub(crate) fn inner(&self) -> &gix::Repository {
         &self.inner

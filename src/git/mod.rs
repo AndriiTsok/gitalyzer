@@ -8,10 +8,12 @@
 
 mod blobdiff;
 pub mod commit;
+pub mod remote;
 pub mod repo;
 pub mod staged;
 
 pub use commit::{CommitError, CommitOutcome, create_commit};
+pub use remote::{RemoteClone, clone_for_analysis, interrupt_clones};
 pub use repo::{HistoryOptions, Repo};
 pub use staged::staged_changes;
 
@@ -43,6 +45,26 @@ pub enum GitError {
     /// `write` was invoked with an empty index diff.
     #[error("nothing is staged; stage changes with `git add` before running `gitalyzer write`")]
     NothingStaged,
+    /// Cloning a remote for analysis failed for non-credential reasons.
+    #[error("cannot clone `{url}`: {message}")]
+    CloneFailed {
+        /// The URL as given.
+        url: String,
+        /// Underlying failure.
+        message: String,
+    },
+    /// Cloning failed on authentication (RFC 0004 R9).
+    #[error(
+        "authentication failed while cloning `{url}`: {message}\n\
+         gitalyzer uses your existing git credentials — check your SSH agent/config for SSH \
+         URLs, or your git credential helper for HTTPS"
+    )]
+    CloneAuthFailed {
+        /// The URL as given.
+        url: String,
+        /// Underlying failure.
+        message: String,
+    },
     /// Any unexpected failure inside gitoxide.
     #[error("git operation failed: {0}")]
     Internal(#[source] Box<dyn std::error::Error + Send + Sync>),

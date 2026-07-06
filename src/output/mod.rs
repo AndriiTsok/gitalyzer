@@ -2,17 +2,40 @@
 //!
 //! Both renderers consume the same [`AnalysisReport`]; the JSON form is the
 //! stable, versioned envelope and the human form follows the PRD layout with
-//! configurable score thresholds. Decoration auto-detection (RFC 0007 R3)
-//! lands with the polish slice; the human report currently always uses the
-//! PRD's decorated layout.
+//! configurable score thresholds. Decoration (emoji + heavy separators)
+//! follows RFC 0007 R3: on for terminals, plain-text headers and ASCII
+//! separators otherwise.
+
+pub mod progress;
 
 use std::fmt::Write as _;
+
+pub use progress::Progress;
 
 use crate::analyze::{AnalysisReport, ReportCommit};
 use crate::config::Thresholds;
 
-/// Heavy separator line from the PRD mockups.
+/// Heavy separator line from the PRD mockups (decorated form).
 const SEPARATOR: &str = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+/// ASCII separator for undecorated output (RFC 0007 R3).
+const PLAIN_SEPARATOR: &str = "----------------------------";
+
+/// Section titles in decorated/plain form (RFC 0007 R3–R4).
+fn titles(decorated: bool) -> (&'static str, &'static str, &'static str) {
+    if decorated {
+        (
+            "💩 COMMITS THAT NEED WORK",
+            "💎 WELL-WRITTEN COMMITS",
+            "📊 YOUR STATS",
+        )
+    } else {
+        (
+            "COMMITS THAT NEED WORK",
+            "WELL-WRITTEN COMMITS",
+            "YOUR STATS",
+        )
+    }
+}
 
 /// Render the stable JSON envelope (RFC 0005 R8), pretty-printed, exactly one
 /// document (RFC 0007 R2).
@@ -33,7 +56,12 @@ pub fn write_json(report: &crate::write::WriteReport) -> String {
 }
 
 /// Render the interactive suggestion block (RFC 0006 R6, PRD §4.2).
-pub fn suggestion_block(suggestion: &crate::write::Suggestion) -> String {
+pub fn suggestion_block(suggestion: &crate::write::Suggestion, decorated: bool) -> String {
+    let separator = if decorated {
+        SEPARATOR
+    } else {
+        PLAIN_SEPARATOR
+    };
     let mut out = String::new();
     if !suggestion.changes_detected.is_empty() {
         out.push_str("Changes detected:\n");
@@ -43,15 +71,17 @@ pub fn suggestion_block(suggestion: &crate::write::Suggestion) -> String {
         out.push('\n');
     }
     let _ = writeln!(out, "Suggested commit message:");
-    let _ = writeln!(out, "{SEPARATOR}");
+    let _ = writeln!(out, "{separator}");
     let _ = writeln!(out, "{}", suggestion.message());
-    let _ = writeln!(out, "{SEPARATOR}");
+    let _ = writeln!(out, "{separator}");
     out
 }
 
 /// Render the human report (RFC 0005 R5/R7): needs-work worst-first,
-/// well-written best-first, the middle band in stats only.
-pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds) -> String {
+/// well-written best-first, the middle band in stats only. `decorated`
+/// selects emoji + heavy separators vs plain text (RFC 0007 R3).
+pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds, decorated: bool) -> String {
+    let (needs_title, good_title, stats_title) = titles(decorated);
     let mut needs_work: Vec<&ReportCommit> = report
         .commits
         .iter()
@@ -69,7 +99,7 @@ pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds) -> Strin
     let mut out = String::new();
 
     if !needs_work.is_empty() {
-        section(&mut out, "💩 COMMITS THAT NEED WORK");
+        section(&mut out, needs_title, decorated);
         for commit in needs_work {
             let _ = writeln!(out, "Commit: {}", quoted(&commit.message));
             let _ = writeln!(out, "Score: {}/10", commit.score);
@@ -84,7 +114,7 @@ pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds) -> Strin
     }
 
     if !well_written.is_empty() {
-        section(&mut out, "💎 WELL-WRITTEN COMMITS");
+        section(&mut out, good_title, decorated);
         for commit in well_written {
             let _ = writeln!(out, "Commit: {}", quoted(&commit.message));
             let _ = writeln!(out, "Score: {}/10", commit.score);
@@ -95,7 +125,7 @@ pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds) -> Strin
         }
     }
 
-    section(&mut out, "📊 YOUR STATS");
+    section(&mut out, stats_title, decorated);
     let _ = writeln!(out, "Average score: {:.1}/10", report.stats.average_score);
     let _ = writeln!(
         out,
@@ -119,10 +149,15 @@ pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds) -> Strin
 }
 
 /// Append a PRD-style section header.
-fn section(out: &mut String, title: &str) {
-    let _ = writeln!(out, "{SEPARATOR}");
+fn section(out: &mut String, title: &str, decorated: bool) {
+    let separator = if decorated {
+        SEPARATOR
+    } else {
+        PLAIN_SEPARATOR
+    };
+    let _ = writeln!(out, "{separator}");
     let _ = writeln!(out, "{title}");
-    let _ = writeln!(out, "{SEPARATOR}");
+    let _ = writeln!(out, "{separator}");
     out.push('\n');
 }
 

@@ -102,10 +102,13 @@ fn unknown_provider_fails_validation_with_exit_one() {
 
 #[test]
 fn analyze_outside_a_repository_fails_actionably() {
-    // RFC 0004 R8: the temp home is not a Git repository.
+    // RFC 0004 R8: the temp home is not a Git repository. A dummy key keeps
+    // provider construction (which deliberately runs first, before any
+    // cloning could start) from masking the repository error.
     let home = TempDir::new().expect("tempdir");
     gitalyzer(&home)
         .arg("analyze")
+        .env("ANTHROPIC_API_KEY", "sk-test-dummy")
         .assert()
         .failure()
         .code(1)
@@ -118,6 +121,7 @@ fn write_outside_a_repository_fails_actionably() {
     let home = TempDir::new().expect("tempdir");
     gitalyzer(&home)
         .arg("write")
+        .env("ANTHROPIC_API_KEY", "sk-test-dummy")
         .assert()
         .failure()
         .code(1)

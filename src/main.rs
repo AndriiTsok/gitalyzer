@@ -11,7 +11,10 @@ use anyhow::Context;
 use clap::{CommandFactory, Parser};
 use gitalyzer::cli::{AnalyzeArgs, Cli, Command, Format, WriteArgs};
 use gitalyzer::config::{self, CliOverrides, Settings, Sources};
-use gitalyzer::git::{CommitError, Repo, create_commit};
+use gitalyzer::git::{
+    CommitError, RemoteClone, Repo, clone_for_analysis, create_commit, interrupt_clones,
+};
+use gitalyzer::output::Progress;
 use gitalyzer::provider::AnyProvider;
 use gitalyzer::write::WriteSession;
 use gitalyzer::{analyze, output};
@@ -59,35 +62,148 @@ async fn run(cli: &Cli) -> anyhow::Result<()> {
 
 /// Execute analysis mode (RFC 0005) and emit the report per RFC 0001 R6/R11.
 async fn run_analyze(cli: &Cli, args: &AnalyzeArgs, settings: &Settings) -> anyhow::Result<()> {
-    if args.url.is_some() {
-        anyhow::bail!(
-            "--url (remote analysis) is not implemented yet — landing in slice 6 (RFC 0008)"
-        );
-    }
-
-    let repo = Repo::discover()?;
     let provider = AnyProvider::from_settings(settings)?;
+    // Progress on stderr in human mode; silent in JSON mode (RFC 0007 R1–R2).
+    let progress = Progress::stderr(cli.format == Format::Human);
 
-    // Progress goes to stderr in human mode only; JSON mode is silent
-    // (RFC 0007 R1–R2).
+    let (holder, repository) = acquire_repository(args, settings, &progress).await?;
+
     if cli.format == Format::Human {
         eprintln!("Analyzing last {} commits...", settings.analyze.count);
     }
 
-    let report = analyze::run(
-        &repo,
-        &provider,
-        settings,
-        args.from.clone(),
-        analyze::Repository::local(),
-    )
-    .await?;
+    let on_batch = |done: usize, total: usize| {
+        progress.step(format!("Critiquing batch {done}/{total}..."));
+    };
+    // Ctrl-C aborts cleanly: temporary clones drop with the cancelled future
+    // (RFC 0004 R5, RFC 0007 R9).
+    let report = tokio::select! {
+        result = analyze::run(
+            holder.repo(),
+            &provider,
+            settings,
+            args.from.clone(),
+            repository,
+            on_batch,
+        ) => result?,
+        _ = tokio::signal::ctrl_c() => {
+            interrupt_clones();
+            anyhow::bail!("interrupted — no report was produced");
+        }
+    };
+    progress.finish();
 
     let rendered = match cli.format {
-        Format::Human => output::analysis_human(&report, &settings.analyze.thresholds),
+        Format::Human => {
+            output::analysis_human(&report, &settings.analyze.thresholds, stdout_decorated(cli))
+        }
         Format::Json => output::analysis_json(&report),
     };
     emit(cli, &rendered)
+}
+
+/// The repository under analysis: discovered locally, or a temporary remote
+/// clone that lives as long as this value (RFC 0004 R5).
+enum RepoHolder {
+    Local(Repo),
+    Remote(RemoteClone),
+}
+
+impl RepoHolder {
+    fn repo(&self) -> &Repo {
+        match self {
+            Self::Local(repo) => repo,
+            Self::Remote(clone) => &clone.repo,
+        }
+    }
+}
+
+/// Open the local repository, or clone the `--url` remote (RFC 0004 R5):
+/// shallow at `count + buffer` normally, full when `--from` must resolve
+/// arbitrary history, and re-cloned full when the shallow boundary proves
+/// too tight for the requested range.
+async fn acquire_repository(
+    args: &AnalyzeArgs,
+    settings: &Settings,
+    progress: &Progress,
+) -> anyhow::Result<(RepoHolder, analyze::Repository)> {
+    let Some(url) = &args.url else {
+        return Ok((
+            RepoHolder::Local(Repo::discover()?),
+            analyze::Repository::local(),
+        ));
+    };
+
+    progress.step(format!("Cloning {url}..."));
+    let depth = if args.from.is_some() {
+        None
+    } else {
+        Some(settings.analyze.count)
+    };
+    let clone = clone_blocking(url.clone(), args.branch.clone(), depth).await?;
+
+    let clone = if clone.shallow && range_exceeds_clone(&clone, settings, args) {
+        progress
+            .step("Shallow history is too small for the requested range; fetching full history...");
+        clone_blocking(url.clone(), args.branch.clone(), None).await?
+    } else {
+        clone
+    };
+
+    Ok((
+        RepoHolder::Remote(clone),
+        analyze::Repository::remote(url.clone()),
+    ))
+}
+
+/// Run the blocking gix clone off the async runtime, aborting promptly on
+/// Ctrl-C via the shared interrupt flag.
+async fn clone_blocking(
+    url: String,
+    branch: Option<String>,
+    depth: Option<u32>,
+) -> anyhow::Result<RemoteClone> {
+    let handle =
+        tokio::task::spawn_blocking(move || clone_for_analysis(&url, branch.as_deref(), depth));
+    tokio::select! {
+        joined = handle => Ok(joined.context("clone task panicked")??),
+        _ = tokio::signal::ctrl_c() => {
+            interrupt_clones();
+            anyhow::bail!("interrupted while cloning — the temporary clone is discarded");
+        }
+    }
+}
+
+/// Cheap probe (no patch content) checking whether the walk can satisfy the
+/// requested count within the shallow boundary (RFC 0004 R5).
+fn range_exceeds_clone(clone: &RemoteClone, settings: &Settings, args: &AnalyzeArgs) -> bool {
+    let requested = usize::try_from(settings.analyze.count).expect("u32 fits usize");
+    let probe = clone.repo.history(&gitalyzer::git::HistoryOptions {
+        from: args.from.clone(),
+        count: requested,
+        max_patch_bytes: 0,
+    });
+    match probe {
+        Ok(commits) => commits.len() < requested,
+        // Let the real run surface empty-history and revision errors.
+        Err(_) => false,
+    }
+}
+
+/// Whether stdout output should carry decoration (RFC 0007 R3, RFC 0001
+/// R12): never under `--no-color` or a non-empty `NO_COLOR`, never into
+/// `--output` files, otherwise when stdout is a terminal.
+fn stdout_decorated(cli: &Cli) -> bool {
+    if cli.no_color || env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
+        return false;
+    }
+    if cli.output.is_some() {
+        return false;
+    }
+    if env::var("GITALYZER_ASSUME_TTY").is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true")) {
+        return true;
+    }
+    std::io::stdout().is_terminal()
 }
 
 /// Execute write mode (RFC 0006): suggest a message for the staged changes,
@@ -124,15 +240,17 @@ async fn run_write(cli: &Cli, args: &WriteArgs, settings: &Settings) -> anyhow::
         );
     }
 
+    let decorated = stdout_decorated(cli);
+
     // Non-interactive dry run: print the suggestion and stop.
     if !interactive {
-        print!("{}", output::suggestion_block(&suggestion));
+        print!("{}", output::suggestion_block(&suggestion, decorated));
         return emit_message(cli, &suggestion.message());
     }
 
     // The accept / type / regenerate loop (RFC 0006 R6, R8).
     loop {
-        print!("{}", output::suggestion_block(&suggestion));
+        print!("{}", output::suggestion_block(&suggestion, decorated));
         println!();
         print!("Press Enter to accept, type your own message, or 'r' to regenerate:\n> ");
         flush_stdout();
@@ -163,7 +281,8 @@ async fn run_write(cli: &Cli, args: &WriteArgs, settings: &Settings) -> anyhow::
         match create_commit(workdir, &message) {
             Ok(outcome) => {
                 let subject = message.lines().next().unwrap_or_default();
-                println!("✓ Committed {}: \"{subject}\"", outcome.short_sha);
+                let mark = if decorated { "✓ " } else { "" };
+                println!("{mark}Committed {}: \"{subject}\"", outcome.short_sha);
                 return Ok(());
             }
             // RFC 0006 R8: show the hook output verbatim, keep the staged

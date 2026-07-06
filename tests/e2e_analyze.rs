@@ -59,6 +59,7 @@ fn human_report_has_the_prd_sections_and_progress_on_stderr() {
     let (fx, short) = seeded_repo();
     gitalyzer(&fx, &critiques(&short))
         .arg("analyze")
+        .env("GITALYZER_ASSUME_TTY", "1")
         .assert()
         .success()
         .stdout(contains("💩 COMMITS THAT NEED WORK"))
@@ -190,4 +191,137 @@ fn incomplete_critiques_fail_with_an_actionable_error() {
         .failure()
         .code(1)
         .stderr(contains("critiqued 1 of 3 commits"));
+}
+
+#[test]
+fn piped_output_degrades_to_plain_headers() {
+    // RFC 0007 R3: no TTY → plain text headers and ASCII separators.
+    let (fx, short) = seeded_repo();
+    let output = gitalyzer(&fx, &critiques(&short))
+        .arg("analyze")
+        .output()
+        .expect("run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("COMMITS THAT NEED WORK"), "got: {stdout}");
+    assert!(!stdout.contains("💩"), "no emoji when piped: {stdout}");
+    assert!(
+        stdout.contains("----------------------------"),
+        "ASCII separators: {stdout}"
+    );
+}
+
+#[test]
+fn no_color_and_the_flag_force_plain_output() {
+    let (fx, short) = seeded_repo();
+    // NO_COLOR beats an interactive terminal (RFC 0007 R3).
+    let output = gitalyzer(&fx, &critiques(&short))
+        .arg("analyze")
+        .env("GITALYZER_ASSUME_TTY", "1")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("💩"));
+
+    // --no-color does the same (RFC 0001 R12).
+    let output = gitalyzer(&fx, &critiques(&short))
+        .args(["analyze", "--no-color"])
+        .env("GITALYZER_ASSUME_TTY", "1")
+        .output()
+        .expect("run");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("💩"));
+}
+
+/// Remote analysis over the file:// transport (RFC 0004 R5): exercised from a
+/// *different* directory so the clone is what gets analyzed.
+#[test]
+fn remote_url_is_cloned_and_analyzed() {
+    let (fx, short) = seeded_repo();
+    let url = format!("file://{}", fx.path().display());
+    let home = tempfile::tempdir().expect("outside dir");
+    let script_path = home.path().join("mock-script.json");
+    std::fs::write(&script_path, critiques(&short).to_string()).expect("script");
+
+    let mut cmd = Command::cargo_bin("gitalyzer").expect("binary builds");
+    let output = cmd
+        .current_dir(home.path())
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").expect("PATH set"))
+        .env("HOME", home.path())
+        .env("GITALYZER_PROVIDER", "mock")
+        .env("GITALYZER_MOCK_SCRIPT", &script_path)
+        .args(["analyze", "--format", "json", "--url", &url])
+        .output()
+        .expect("run");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let envelope: Value = serde_json::from_slice(&output.stdout).expect("clean JSON");
+    assert_eq!(envelope["repository"]["source"], "remote");
+    assert_eq!(envelope["repository"]["url"], url.as_str());
+    assert_eq!(envelope["range"]["analyzed"], 3);
+}
+
+#[test]
+fn remote_branch_selection_analyzes_that_branch() {
+    let (mut fx, _short) = seeded_repo();
+    fx.branch("side");
+    let side_sha = fx.commit_file("chore(side): branch-only work", "side.txt", "side\n");
+    fx.checkout("main");
+
+    let url = format!("file://{}", fx.path().display());
+    let home = tempfile::tempdir().expect("outside dir");
+    let script = json!([{ "critiques": [
+        { "sha": &side_sha[..7], "score": 7,
+          "tags": { "vague": false, "misleading": false, "no_why": true } },
+    ]}]);
+    let script_path = home.path().join("mock-script.json");
+    std::fs::write(&script_path, script.to_string()).expect("script");
+
+    let mut cmd = Command::cargo_bin("gitalyzer").expect("binary builds");
+    let output = cmd
+        .current_dir(home.path())
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").expect("PATH set"))
+        .env("HOME", home.path())
+        .env("GITALYZER_PROVIDER", "mock")
+        .env("GITALYZER_MOCK_SCRIPT", &script_path)
+        .args([
+            "analyze", "--format", "json", "-n", "1", "--url", &url, "--branch", "side",
+        ])
+        .output()
+        .expect("run");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let envelope: Value = serde_json::from_slice(&output.stdout).expect("clean JSON");
+    assert_eq!(
+        envelope["commits"][0]["message"],
+        "chore(side): branch-only work"
+    );
+}
+
+#[test]
+fn unreachable_remote_url_fails_actionably() {
+    let home = tempfile::tempdir().expect("outside dir");
+    let script_path = home.path().join("mock-script.json");
+    std::fs::write(&script_path, "[]").expect("script");
+    let mut cmd = Command::cargo_bin("gitalyzer").expect("binary builds");
+    cmd.current_dir(home.path())
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").expect("PATH set"))
+        .env("HOME", home.path())
+        .env("GITALYZER_PROVIDER", "mock")
+        .env("GITALYZER_MOCK_SCRIPT", &script_path)
+        .args(["analyze", "--url", "file:///definitely/not/a/repo"])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(contains("cannot clone"));
 }

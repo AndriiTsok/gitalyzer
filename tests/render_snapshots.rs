@@ -85,8 +85,14 @@ fn fixed_report() -> AnalysisReport {
 
 #[test]
 fn human_report_layout_is_stable() {
-    let rendered = output::analysis_human(&fixed_report(), &Thresholds::default());
+    let rendered = output::analysis_human(&fixed_report(), &Thresholds::default(), true);
     insta::assert_snapshot!("analysis_human", rendered);
+}
+
+#[test]
+fn plain_human_report_layout_is_stable() {
+    let rendered = output::analysis_human(&fixed_report(), &Thresholds::default(), false);
+    insta::assert_snapshot!("analysis_human_plain", rendered);
 }
 
 #[test]
@@ -133,6 +139,6 @@ fn write_envelope_and_suggestion_block_are_stable() {
     insta::assert_snapshot!("write_json", output::write_json(&report));
     insta::assert_snapshot!(
         "write_suggestion_block",
-        output::suggestion_block(&suggestion)
+        output::suggestion_block(&suggestion, true)
     );
 }
