@@ -39,7 +39,8 @@ early keeps later RFCs and code aligned.
     anything Git resolves (SHA, branch, tag, `HEAD~20`);
   - `--batch-size <N>` — commits per LLM request (default and semantics: RFC 0005).
 - **R5.** `write` MUST operate on the staged changes of the current repository and be
-  interactive by default.
+  interactive by default. A `--dry-run` flag runs the full flow but prints the final
+  message instead of committing (details: RFC 0006).
 - **R6.** A global `--format <human|json>` flag MUST select the output format
   (default: `human`). In JSON mode: output MUST be stable, documented, and
   machine-parseable; progress indication and decoration MUST be suppressed; `write`
@@ -80,6 +81,7 @@ Examples:
   gitalyzer analyze -n 100 --from 1a2b3c4
   gitalyzer analyze --format json --output report.json
   gitalyzer write
+  gitalyzer write --dry-run
 ```
 
 ## Alternatives considered
@@ -105,3 +107,4 @@ Examples:
 - 2026-07-06 — Amended alongside RFC 0005: added `--output <path>` (R11).
 - 2026-07-06 — Amended alongside RFC 0004 changes: `--url` accepts any Git transport;
   added `--branch <name>` (R4).
+- 2026-07-06 — Amended alongside RFC 0006: added `write --dry-run` (R5).

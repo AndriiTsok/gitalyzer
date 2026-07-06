@@ -98,7 +98,9 @@ One-word commits: 12 (24%)
 - Summarizes what changed: file/line counts plus a short thematic breakdown.
 - Suggests a **well-formatted commit message** (conventional style: typed, scoped
   summary line plus explanatory bullets).
-- Lets the user **accept the suggestion with Enter or type their own message**.
+- Lets the user **accept with Enter, type their own message, or regenerate** a new
+  suggestion; accepting creates the commit through the user's own Git (hooks and
+  signing respected). A dry-run option prints the message instead.
 
 Expected shape of an interactive session:
 
@@ -121,7 +123,7 @@ refactor(auth): improve error handling
 - Update tests to cover edge cases
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Press Enter to accept, or type your own message:
+Press Enter to accept, type your own message, or 'r' to regenerate:
 >
 ```
 
@@ -182,11 +184,9 @@ The canonical CLI surface is specified in [RFC 0001](rfcs/0001-cli-surface.md).
 
 ## 9. Open questions
 
-To be resolved together in the requirements RFC before implementation:
-
-- Should accepting a suggestion in interactive mode create the commit directly, or
-  only emit the message?
-- How should very large histories or very large staged diffs be handled?
+None currently — the initial questions (commit-on-accept, history scope, large-diff
+handling) are resolved in RFCs [0001](rfcs/0001-cli-surface.md)–[0006](rfcs/0006-write-mode.md).
+New product questions land here before graduating to an RFC.
 
 ## 10. Success criteria
 
