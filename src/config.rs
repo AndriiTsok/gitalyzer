@@ -39,10 +39,13 @@ const API_KEY_FALLBACKS: &[(&str, &str)] = &[
 /// `GITALYZER_*` variables that are operational, not configuration — they
 /// must never reach the env layer (they would read as unknown config keys
 /// and warn, polluting even JSON-mode stderr, RFC 0007 R2).
+/// `GITALYZER_ASSUME_TTY` is the internal end-to-end-testing escape hatch for
+/// the write-mode TTY requirement (RFC 0006 R1).
 const RESERVED_ENV_VARS: &[&str] = &[
     "GITALYZER_LOG",
     "GITALYZER_LOG_FORMAT",
     "GITALYZER_MOCK_SCRIPT",
+    "GITALYZER_ASSUME_TTY",
 ];
 
 /// Configuration keys understood by this version; anything else in the merged

@@ -94,3 +94,45 @@ fn json_envelope_is_stable() {
     let rendered = output::analysis_json(&fixed_report());
     insta::assert_snapshot!("analysis_json", rendered);
 }
+
+#[test]
+fn write_envelope_and_suggestion_block_are_stable() {
+    use gitalyzer::write::{
+        Meta as WriteMeta, StagedSummary, Suggestion, SuggestionReport, WriteReport,
+    };
+
+    let suggestion = Suggestion {
+        changes_detected: vec![
+            "Modified authentication logic".to_owned(),
+            "Added error handling".to_owned(),
+        ],
+        subject: "refactor(auth): improve error handling".to_owned(),
+        body: Some("- Add specific error types for auth failures\n- Update tests".to_owned()),
+    };
+    let report = WriteReport {
+        schema_version: 1,
+        mode: "write",
+        staged: StagedSummary {
+            files_changed: 2,
+            insertions: 24,
+            deletions: 7,
+            files: vec!["src/auth.rs".to_owned(), "src/errors.rs".to_owned()],
+        },
+        changes_detected: suggestion.changes_detected.clone(),
+        suggestion: SuggestionReport {
+            subject: suggestion.subject.clone(),
+            body: suggestion.body.clone(),
+            style: "auto",
+        },
+        meta: WriteMeta {
+            provider: "anthropic".to_owned(),
+            model: "claude-sonnet-5".to_owned(),
+        },
+    };
+
+    insta::assert_snapshot!("write_json", output::write_json(&report));
+    insta::assert_snapshot!(
+        "write_suggestion_block",
+        output::suggestion_block(&suggestion)
+    );
+}

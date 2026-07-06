@@ -7,9 +7,11 @@
 //! shells out to the system `git` (R6).
 
 mod blobdiff;
+pub mod commit;
 pub mod repo;
 pub mod staged;
 
+pub use commit::{CommitError, CommitOutcome, create_commit};
 pub use repo::{HistoryOptions, Repo};
 pub use staged::staged_changes;
 

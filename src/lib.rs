@@ -10,9 +10,8 @@
 //! | [`provider`] | 0003 | LLM adapters with schema-enforced JSON             |
 //! | [`git`]      | 0004 | repository reads: history walk, staged extraction  |
 //! | [`analyze`]  | 0005 | batching, critique pipeline, deterministic stats   |
+//! | [`write`]    | 0006 | staged-context budgeting, suggestion task          |
 //! | [`output`]   | 0007 | human and JSON report rendering                    |
-//!
-//! The write module (RFC 0006) lands next per RFC 0008.
 
 pub mod analyze;
 pub mod cli;
@@ -20,3 +19,4 @@ pub mod config;
 pub mod git;
 pub mod output;
 pub mod provider;
+pub mod write;

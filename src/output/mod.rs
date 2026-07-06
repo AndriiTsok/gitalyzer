@@ -23,6 +23,32 @@ pub fn analysis_json(report: &AnalysisReport) -> String {
     rendered
 }
 
+/// Render the write-mode JSON envelope (RFC 0006 R10), pretty-printed,
+/// exactly one document (RFC 0007 R2).
+pub fn write_json(report: &crate::write::WriteReport) -> String {
+    let mut rendered =
+        serde_json::to_string_pretty(report).expect("report serialization cannot fail");
+    rendered.push('\n');
+    rendered
+}
+
+/// Render the interactive suggestion block (RFC 0006 R6, PRD §4.2).
+pub fn suggestion_block(suggestion: &crate::write::Suggestion) -> String {
+    let mut out = String::new();
+    if !suggestion.changes_detected.is_empty() {
+        out.push_str("Changes detected:\n");
+        for change in &suggestion.changes_detected {
+            let _ = writeln!(out, "- {change}");
+        }
+        out.push('\n');
+    }
+    let _ = writeln!(out, "Suggested commit message:");
+    let _ = writeln!(out, "{SEPARATOR}");
+    let _ = writeln!(out, "{}", suggestion.message());
+    let _ = writeln!(out, "{SEPARATOR}");
+    out
+}
+
 /// Render the human report (RFC 0005 R5/R7): needs-work worst-first,
 /// well-written best-first, the middle band in stats only.
 pub fn analysis_human(report: &AnalysisReport, thresholds: &Thresholds) -> String {

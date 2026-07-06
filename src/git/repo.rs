@@ -64,6 +64,44 @@ impl Repo {
         &self.inner
     }
 
+    /// The working tree root; `None` for bare repositories.
+    pub fn workdir(&self) -> Option<&Path> {
+        self.inner.workdir()
+    }
+
+    /// Subjects of up to `limit` recent non-merge commits, newest first —
+    /// the style-inference context of RFC 0006 R4. An empty or unborn
+    /// history yields an empty list (style then falls back to Conventional
+    /// Commits), never an error.
+    pub fn recent_subjects(&self, limit: usize) -> Result<Vec<String>, GitError> {
+        let Ok(start) = self.inner.rev_parse_single("HEAD") else {
+            return Ok(Vec::new());
+        };
+        let walk = self
+            .inner
+            .rev_walk(Some(start.detach()))
+            .sorting(gix::revision::walk::Sorting::ByCommitTime(
+                gix::traverse::commit::simple::CommitTimeOrder::NewestFirst,
+            ))
+            .all()
+            .map_err(internal)?;
+
+        let mut subjects = Vec::new();
+        for info in walk {
+            if subjects.len() >= limit {
+                break;
+            }
+            let info = info.map_err(internal)?;
+            if info.parent_ids.len() > 1 {
+                continue;
+            }
+            let commit = self.inner.find_commit(info.id).map_err(internal)?;
+            let message = commit.message().map_err(internal)?;
+            subjects.push(message.title.to_str_lossy().trim().to_owned());
+        }
+        Ok(subjects)
+    }
+
     /// Walk history newest-first from `--from` (default `HEAD`), skipping
     /// merge commits, and extract per-commit context (RFC 0004 R1–R3).
     pub fn history(&self, options: &HistoryOptions) -> Result<Vec<CommitInfo>, GitError> {

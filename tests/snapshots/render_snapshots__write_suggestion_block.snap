@@ -1,0 +1,15 @@
+---
+source: tests/render_snapshots.rs
+expression: "output::suggestion_block(&suggestion)"
+---
+Changes detected:
+- Modified authentication logic
+- Added error handling
+
+Suggested commit message:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+refactor(auth): improve error handling
+
+- Add specific error types for auth failures
+- Update tests
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━

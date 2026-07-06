@@ -125,4 +125,28 @@ impl FixtureRepo {
     pub fn head(&self) -> String {
         self.git(&["rev-parse", "HEAD"]).trim().to_owned()
     }
+
+    /// Install an executable hook (e.g. `commit-msg`) with the given script.
+    pub fn install_hook(&self, name: &str, script: &str) {
+        let path = self.path().join(".git").join("hooks").join(name);
+        std::fs::create_dir_all(path.parent().expect("hooks dir")).expect("hooks dir");
+        std::fs::write(&path, script).expect("hook written");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                .expect("hook executable");
+        }
+    }
+
+    /// Full message of the current `HEAD` commit.
+    pub fn head_message(&self) -> String {
+        self.git(&["log", "-1", "--format=%B"]).trim().to_owned()
+    }
+
+    /// Number of commits reachable from `HEAD` (0 for unborn).
+    pub fn commit_count(&self) -> usize {
+        let out = self.git(&["rev-list", "--count", "--all"]);
+        out.trim().parse().unwrap_or(0)
+    }
 }

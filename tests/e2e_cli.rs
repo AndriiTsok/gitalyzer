@@ -113,13 +113,13 @@ fn analyze_outside_a_repository_fails_actionably() {
 }
 
 #[test]
-fn write_reports_not_implemented_for_now() {
-    // Slice honesty: `write` parses and resolves config, then says so.
+fn write_outside_a_repository_fails_actionably() {
+    // RFC 0004 R8: the temp home is not a Git repository.
     let home = TempDir::new().expect("tempdir");
     gitalyzer(&home)
         .arg("write")
         .assert()
         .failure()
         .code(1)
-        .stderr(contains("not implemented yet"));
+        .stderr(contains("not inside a Git repository"));
 }

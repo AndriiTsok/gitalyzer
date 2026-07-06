@@ -1,0 +1,30 @@
+---
+source: tests/render_snapshots.rs
+expression: "output::write_json(&report)"
+---
+{
+  "schema_version": 1,
+  "mode": "write",
+  "staged": {
+    "files_changed": 2,
+    "insertions": 24,
+    "deletions": 7,
+    "files": [
+      "src/auth.rs",
+      "src/errors.rs"
+    ]
+  },
+  "changes_detected": [
+    "Modified authentication logic",
+    "Added error handling"
+  ],
+  "suggestion": {
+    "subject": "refactor(auth): improve error handling",
+    "body": "- Add specific error types for auth failures\n- Update tests",
+    "style": "auto"
+  },
+  "meta": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5"
+  }
+}
