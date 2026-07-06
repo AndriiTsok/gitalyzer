@@ -99,3 +99,12 @@ we deserialize into). Final versions locked in the implementation-bootstrap RFC.
 
 - PRD: [`../product.md`](../product.md), §5.
 - RFC 0001 R7 (CLI overrides); RFC 0002 R5–R6 (env convention, key fallback).
+
+## Changelog
+
+- 2026-07-06 — Amended: tasks carry an output-token budget hint scaled by the
+  caller (Anthropic `max_tokens`; deliberately not sent to OpenAI, where
+  reasoning models spend output budget on hidden thinking). Truncated output
+  (`stop_reason: max_tokens` / `finish_reason: length`) and context-window
+  overflow (HTTP 400/413) map to dedicated actionable errors instead of
+  surfacing as validation failures.

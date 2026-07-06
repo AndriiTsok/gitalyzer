@@ -120,3 +120,12 @@ file via `--output`).
 ## References
 
 - PRD §4.1; RFC 0001 R4/R6/R11; RFC 0002 (config); RFC 0003 R3–R4/R9; RFC 0004 R1–R3/R5.
+
+## Changelog
+
+- 2026-07-06 — Amended: the R2 system prompt is overridable via
+  `analyze.system_prompt` (structured output remains schema-enforced); R4
+  batching additionally packs under a hard per-request byte ceiling
+  (`analyze.max_batch_bytes`, default 256 KiB) so `batch_size: 0` over large
+  ranges cannot overflow a model's context window; commit messages inside
+  prompts are capped; output-token budgets scale with batch size.

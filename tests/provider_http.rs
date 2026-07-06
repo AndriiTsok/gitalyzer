@@ -113,9 +113,16 @@ async fn anthropic_forces_the_tool_call_and_returns_typed_output() {
         .mount(&server)
         .await;
 
-    let verdict: Verdict = run_task(&anthropic(&server), "judge", "judge things", "sys", "user")
-        .await
-        .expect("typed result");
+    let verdict: Verdict = run_task(
+        &anthropic(&server),
+        "judge",
+        "judge things",
+        "sys",
+        "user",
+        None,
+    )
+    .await
+    .expect("typed result");
     assert_eq!(verdict.score, 9);
     assert_eq!(verdict.summary, "great");
 }
@@ -132,7 +139,7 @@ async fn anthropic_maps_auth_and_model_errors() {
         .mount(&server)
         .await;
 
-    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u")
+    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u", None)
         .await
         .expect_err("401 must fail");
     assert!(matches!(error, ProviderError::Auth { .. }), "got: {error}");
@@ -145,7 +152,7 @@ async fn anthropic_maps_auth_and_model_errors() {
         })))
         .mount(&server)
         .await;
-    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u")
+    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u", None)
         .await
         .expect_err("404 must fail");
     assert!(
@@ -167,7 +174,7 @@ async fn transient_429_is_retried_until_success() {
         .mount(&server)
         .await;
 
-    let verdict: Verdict = run_task(&anthropic(&server), "judge", "d", "s", "u")
+    let verdict: Verdict = run_task(&anthropic(&server), "judge", "d", "s", "u", None)
         .await
         .expect("second try wins");
     assert_eq!(verdict.score, 5);
@@ -182,7 +189,7 @@ async fn persistent_500s_exhaust_the_retry_budget() {
         .mount(&server)
         .await;
 
-    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u")
+    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u", None)
         .await
         .expect_err("must give up");
     assert!(
@@ -207,7 +214,7 @@ async fn openai_uses_json_schema_response_format() {
         .mount(&server)
         .await;
 
-    let verdict: Verdict = run_task(&openai(&server), "judge", "d", "s", "u")
+    let verdict: Verdict = run_task(&openai(&server), "judge", "d", "s", "u", None)
         .await
         .expect("typed result");
     assert_eq!(verdict.score, 8);
@@ -242,13 +249,13 @@ async fn openai_degrades_to_json_object_once_and_caches_it() {
         .await;
 
     let provider = openai(&server);
-    let first: Verdict = run_task(&provider, "judge", "d", "s", "u")
+    let first: Verdict = run_task(&provider, "judge", "d", "s", "u", None)
         .await
         .expect("degrades");
     assert_eq!(first.summary, "fallback");
     // Second task must skip straight to json_object: 1 rejection + 1 success
     // for the first call, then exactly 1 request for the second.
-    let second: Verdict = run_task(&provider, "judge", "d", "s", "u")
+    let second: Verdict = run_task(&provider, "judge", "d", "s", "u", None)
         .await
         .expect("cached mode");
     assert_eq!(second.score, 4);
@@ -272,7 +279,7 @@ async fn schema_invalid_result_triggers_one_repair_retry() {
         .mount(&server)
         .await;
 
-    let verdict: Verdict = run_task(&anthropic(&server), "judge", "d", "s", "u")
+    let verdict: Verdict = run_task(&anthropic(&server), "judge", "d", "s", "u", None)
         .await
         .expect("repaired");
     assert_eq!(verdict.summary, "repaired");
@@ -289,8 +296,96 @@ async fn openai_strips_markdown_fences_from_local_models() {
         .mount(&server)
         .await;
 
-    let verdict: Verdict = run_task(&openai(&server), "judge", "d", "s", "u")
+    let verdict: Verdict = run_task(&openai(&server), "judge", "d", "s", "u", None)
         .await
         .expect("fences stripped");
     assert_eq!(verdict.summary, "fenced");
+}
+
+#[tokio::test]
+async fn output_token_hint_reaches_the_anthropic_request() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        // The caller-provided budget must land as max_tokens (context safety).
+        .and(body_partial_json(json!({ "max_tokens": 4096 })))
+        .respond_with(anthropic_tool_response(
+            &json!({"score": 5, "summary": "ok"}),
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let verdict: Verdict = run_task(&anthropic(&server), "judge", "d", "s", "u", Some(4096))
+        .await
+        .expect("typed result");
+    assert_eq!(verdict.score, 5);
+}
+
+#[tokio::test]
+async fn anthropic_max_tokens_stop_is_a_truncation_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "content": [{ "type": "tool_use", "name": "judge",
+                          "input": {"score": 5, "summary": "cut off mid" } }],
+            "stop_reason": "max_tokens"
+        })))
+        .mount(&server)
+        .await;
+
+    let error = run_task::<Verdict>(&anthropic(&server), "judge", "d", "s", "u", None)
+        .await
+        .expect_err("truncated output must fail loudly");
+    assert!(
+        matches!(error, ProviderError::OutputTruncated { .. }),
+        "got: {error}"
+    );
+    assert!(
+        error.to_string().contains("batch"),
+        "actionable hint, got: {error}"
+    );
+}
+
+#[tokio::test]
+async fn openai_length_finish_is_a_truncation_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "choices": [{ "finish_reason": "length",
+                "message": { "role": "assistant", "content": "{\"score\": 5" } }]
+        })))
+        .mount(&server)
+        .await;
+
+    let error = run_task::<Verdict>(&openai(&server), "judge", "d", "s", "u", None)
+        .await
+        .expect_err("truncated output must fail loudly");
+    assert!(
+        matches!(error, ProviderError::OutputTruncated { .. }),
+        "got: {error}"
+    );
+}
+
+#[tokio::test]
+async fn context_window_overflow_maps_to_an_actionable_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": { "message":
+                "This model's maximum context length is 272000 tokens, however you requested 401992 tokens" }
+        })))
+        .mount(&server)
+        .await;
+
+    let error = run_task::<Verdict>(&openai(&server), "judge", "d", "s", "u", None)
+        .await
+        .expect_err("overflow must fail actionably");
+    assert!(
+        matches!(error, ProviderError::ContextTooLarge { .. }),
+        "got: {error}"
+    );
+    assert!(
+        error.to_string().contains("batch_size"),
+        "hint present, got: {error}"
+    );
 }

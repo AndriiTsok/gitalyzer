@@ -128,12 +128,15 @@ analyze:
   batch_size: 10               # GITALYZER_ANALYZE__BATCH_SIZE (0 = one request)
   concurrency: 1               # GITALYZER_ANALYZE__CONCURRENCY (batches in flight)
   max_patch_bytes: 4096        # GITALYZER_ANALYZE__MAX_PATCH_BYTES (0 = never send code)
+  max_batch_bytes: 262144      # GITALYZER_ANALYZE__MAX_BATCH_BYTES (hard byte ceiling per request)
+  system_prompt: null          # GITALYZER_ANALYZE__SYSTEM_PROMPT (see docs/prompts.md)
   thresholds:
     needs_work: 5              # GITALYZER_ANALYZE__THRESHOLDS__NEEDS_WORK
     well_written: 8            # GITALYZER_ANALYZE__THRESHOLDS__WELL_WRITTEN
 
 write:
   style: auto                  # GITALYZER_WRITE__STYLE (auto | conventional)
+  system_prompt: null          # GITALYZER_WRITE__SYSTEM_PROMPT (see docs/prompts.md)
   max_file_patch_bytes: 8192   # GITALYZER_WRITE__MAX_FILE_PATCH_BYTES
   max_diff_bytes: 65536        # GITALYZER_WRITE__MAX_DIFF_BYTES
 
@@ -149,6 +152,14 @@ providers:
 `write.style: auto` infers the repository's dominant message convention from
 recent history and falls back to Conventional Commits; `conventional` always
 suggests `type(scope): summary` messages.
+
+The system prompts behind both modes are documented verbatim — and fully
+overridable per user or per project — in [`docs/prompts.md`](docs/prompts.md).
+Result parsing never depends on prompt wording: output shape is schema-enforced
+at the API level. Context windows are protected by construction: prompts are
+packed under a hard per-request byte ceiling (`analyze.max_batch_bytes`),
+pathological commit messages are capped, output-token budgets scale with batch
+size, and overflow/truncation surface as specific, actionable errors.
 
 ## JSON output & scripting
 

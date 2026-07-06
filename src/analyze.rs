@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Settings;
 use crate::git::{CommitInfo, GitError, HistoryOptions, Repo};
-use crate::provider::{AnyProvider, LlmProvider as _, ProviderError, run_task};
+use crate::provider::{
+    AnyProvider, LlmProvider as _, ProviderError, run_task, truncate_for_prompt,
+};
 
 /// Tool/schema name of the critique task.
 const TASK_NAME: &str = "critique_commits";
@@ -18,10 +20,20 @@ const TASK_DESCRIPTION: &str =
 /// At most this many file paths are listed per commit in the prompt
 /// (RFC 0005 R3); counts always reflect the full change.
 const PROMPT_FILE_CAP: usize = 20;
+/// Commit messages inside the prompt are capped too — a pathological
+/// megabyte-sized message must not blow the request (context safety).
+const PROMPT_MESSAGE_CAP: usize = 4096;
+/// Output-token budget: base plus per-commit allowance, so critiques for a
+/// large batch are never truncated mid-JSON; capped to stay within every
+/// current model's output limit.
+const OUTPUT_TOKENS_BASE: u32 = 1024;
+const OUTPUT_TOKENS_PER_COMMIT: u32 = 512;
+const OUTPUT_TOKENS_CAP: u32 = 32_768;
 
-/// The scoring rubric (RFC 0005 R2). Semantics are fixed by the RFC; the
-/// wording lives here as the system prompt.
-const SYSTEM_PROMPT: &str = "\
+/// The default scoring rubric (RFC 0005 R2) — the analyze system prompt.
+/// Overridable via `analyze.system_prompt`; structured output remains
+/// schema-enforced regardless of prompt wording.
+pub const DEFAULT_SYSTEM_PROMPT: &str = "\
 You are an expert code-review lead assessing Git commit message quality.
 
 Score every commit from 1 to 10 against this rubric:
@@ -253,7 +265,11 @@ pub async fn run(
     };
     let commits = repo.history(&options)?;
 
-    let batches = chunk(&commits, settings.analyze.batch_size);
+    let batches = pack_batches(
+        &commits,
+        settings.analyze.batch_size,
+        usize::try_from(settings.analyze.max_batch_bytes).unwrap_or(usize::MAX),
+    );
     let batch_count = batches.len();
     tracing::debug!(
         commits = commits.len(),
@@ -266,9 +282,18 @@ pub async fn run(
     let completed = std::sync::atomic::AtomicUsize::new(0);
     let completed = &completed;
     let on_batch_done = &on_batch_done;
+    let system = settings
+        .analyze
+        .system_prompt
+        .as_deref()
+        .unwrap_or(DEFAULT_SYSTEM_PROMPT);
     let critiques: Vec<Vec<CommitCritique>> = stream::iter(batches.iter().enumerate())
         .map(|(index, batch)| async move {
             let user = batch_prompt(batch);
+            let batch_len = u32::try_from(batch.len()).unwrap_or(u32::MAX);
+            let max_output = (OUTPUT_TOKENS_BASE
+                .saturating_add(batch_len.saturating_mul(OUTPUT_TOKENS_PER_COMMIT)))
+            .min(OUTPUT_TOKENS_CAP);
             tracing::debug!(
                 batch = index + 1,
                 of = batch_count,
@@ -279,8 +304,9 @@ pub async fn run(
                 provider,
                 TASK_NAME,
                 TASK_DESCRIPTION,
-                SYSTEM_PROMPT,
+                system,
                 &user,
+                Some(max_output),
             )
             .await
             .map(|result| result.critiques);
@@ -322,54 +348,85 @@ pub async fn run(
     })
 }
 
-/// Split commits into batches; `batch_size == 0` sends everything in one
-/// request (RFC 0005 R4).
-fn chunk(commits: &[CommitInfo], batch_size: u32) -> Vec<&[CommitInfo]> {
-    if batch_size == 0 {
-        return vec![commits];
+/// Pack commits into batches respecting both the count limit
+/// (`batch_size == 0` means "as few requests as possible") and the hard byte
+/// ceiling per request — huge ranges can therefore never overflow a model's
+/// context window (RFC 0005 R4, amended). A single commit always ships even
+/// if its (already capped) block alone exceeds the ceiling.
+fn pack_batches(
+    commits: &[CommitInfo],
+    batch_size: u32,
+    max_batch_bytes: usize,
+) -> Vec<Vec<&CommitInfo>> {
+    let count_limit = if batch_size == 0 {
+        usize::MAX
+    } else {
+        usize::try_from(batch_size).expect("u32 fits usize")
+    };
+    let mut batches: Vec<Vec<&CommitInfo>> = Vec::new();
+    let mut current: Vec<&CommitInfo> = Vec::new();
+    let mut current_bytes = 0usize;
+    for commit in commits {
+        let block = commit_block(commit).len();
+        let over_bytes = !current.is_empty() && current_bytes + block > max_batch_bytes;
+        let over_count = current.len() >= count_limit;
+        if over_bytes || over_count {
+            batches.push(std::mem::take(&mut current));
+            current_bytes = 0;
+        }
+        current_bytes += block;
+        current.push(commit);
     }
-    commits
-        .chunks(usize::try_from(batch_size).expect("u32 fits usize"))
-        .collect()
+    if !current.is_empty() {
+        batches.push(current);
+    }
+    batches
 }
 
 /// Render one batch of commits as the user prompt (RFC 0005 R3 context).
-fn batch_prompt(batch: &[CommitInfo]) -> String {
-    use std::fmt::Write as _;
+fn batch_prompt(batch: &[&CommitInfo]) -> String {
     let mut out = String::from("Critique the following commits:\n");
     for commit in batch {
-        let _ = write!(
+        out.push_str(&commit_block(commit));
+    }
+    out
+}
+
+/// Render one commit's prompt block; also the unit of batch-size packing.
+fn commit_block(commit: &CommitInfo) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "\n=== Commit {sha} ===\nMessage:\n{message}\nChange: {files} file(s), \
+         +{ins} -{del}\n",
+        sha = commit.short_sha,
+        message = truncate_for_prompt(&commit.message, PROMPT_MESSAGE_CAP),
+        files = commit.stats.files_changed,
+        ins = commit.stats.insertions,
+        del = commit.stats.deletions,
+    );
+    if !commit.stats.files.is_empty() {
+        let shown = commit.stats.files.iter().take(PROMPT_FILE_CAP);
+        let _ = writeln!(
             out,
-            "\n=== Commit {sha} ===\nMessage:\n{message}\nChange: {files} file(s), \
-             +{ins} -{del}\n",
-            sha = commit.short_sha,
-            message = commit.message,
-            files = commit.stats.files_changed,
-            ins = commit.stats.insertions,
-            del = commit.stats.deletions,
+            "Files: {}",
+            shown.cloned().collect::<Vec<_>>().join(", ")
         );
-        if !commit.stats.files.is_empty() {
-            let shown = commit.stats.files.iter().take(PROMPT_FILE_CAP);
+        if commit.stats.files.len() > PROMPT_FILE_CAP {
             let _ = writeln!(
                 out,
-                "Files: {}",
-                shown.cloned().collect::<Vec<_>>().join(", ")
+                "(+{} more files)",
+                commit.stats.files.len() - PROMPT_FILE_CAP
             );
-            if commit.stats.files.len() > PROMPT_FILE_CAP {
-                let _ = writeln!(
-                    out,
-                    "(+{} more files)",
-                    commit.stats.files.len() - PROMPT_FILE_CAP
-                );
-            }
         }
-        match &commit.patch {
-            Some(patch) => {
-                let _ = writeln!(out, "Patch excerpt:\n{patch}");
-            }
-            None => {
-                let _ = writeln!(out, "Patch excerpt: (patch content disabled)");
-            }
+    }
+    match &commit.patch {
+        Some(patch) => {
+            let _ = writeln!(out, "Patch excerpt:\n{patch}");
+        }
+        None => {
+            let _ = writeln!(out, "Patch excerpt: (patch content disabled)");
         }
     }
     out
@@ -491,11 +548,46 @@ mod tests {
     }
 
     #[test]
-    fn chunking_honors_batch_size_and_zero_means_one_batch() {
+    fn packing_honors_batch_size_and_zero_means_fewest_requests() {
         let commits: Vec<_> = (0..7).map(|i| commit(&format!("c{i}00000"), "m")).collect();
-        assert_eq!(chunk(&commits, 0).len(), 1);
-        assert_eq!(chunk(&commits, 3).len(), 3, "7 commits / 3 => 3 batches");
-        assert_eq!(chunk(&commits, 10).len(), 1);
+        assert_eq!(pack_batches(&commits, 0, usize::MAX).len(), 1);
+        assert_eq!(
+            pack_batches(&commits, 3, usize::MAX).len(),
+            3,
+            "7 / 3 => 3 batches"
+        );
+        assert_eq!(pack_batches(&commits, 10, usize::MAX).len(), 1);
+    }
+
+    #[test]
+    fn packing_respects_the_byte_ceiling_even_unbatched() {
+        // Each block is ~70+ bytes; a tight ceiling forces splits even with
+        // batch_size 0 — the context window can never be overflowed.
+        let commits: Vec<_> = (0..6)
+            .map(|i| commit(&format!("c{i}00000"), "subject"))
+            .collect();
+        let block = commit_block(&commits[0]).len();
+        let batches = pack_batches(&commits, 0, block * 2);
+        assert_eq!(batches.len(), 3, "two blocks per batch under the ceiling");
+        assert!(batches.iter().all(|b| b.len() == 2));
+
+        // A single commit larger than the ceiling still ships alone.
+        let tiny = pack_batches(&commits[..1], 0, 1);
+        assert_eq!(tiny.len(), 1);
+        assert_eq!(tiny[0].len(), 1);
+    }
+
+    #[test]
+    fn pathological_commit_messages_are_capped_in_the_prompt() {
+        let huge = "x".repeat(100_000);
+        let info = commit("abc1234", &huge);
+        let block = commit_block(&info);
+        assert!(
+            block.len() < 10_000,
+            "block stays bounded, got {}",
+            block.len()
+        );
+        assert!(block.contains('…'), "truncation marker present");
     }
 
     #[test]
@@ -550,11 +642,33 @@ mod tests {
     }
 
     #[test]
+    fn system_prompt_override_is_used_verbatim() {
+        let mut settings = crate::config::Settings::default();
+        assert_eq!(
+            settings
+                .analyze
+                .system_prompt
+                .as_deref()
+                .unwrap_or(DEFAULT_SYSTEM_PROMPT),
+            DEFAULT_SYSTEM_PROMPT
+        );
+        settings.analyze.system_prompt = Some("You are a pirate reviewer.".into());
+        assert_eq!(
+            settings
+                .analyze
+                .system_prompt
+                .as_deref()
+                .unwrap_or(DEFAULT_SYSTEM_PROMPT),
+            "You are a pirate reviewer."
+        );
+    }
+
+    #[test]
     fn prompt_caps_the_file_list_but_not_the_counts() {
         let mut info = commit("abc1234", "touch many files");
         info.stats.files = (0..30).map(|i| format!("file{i}.rs")).collect();
         info.stats.files_changed = 30;
-        let prompt = batch_prompt(std::slice::from_ref(&info));
+        let prompt = batch_prompt(&[&info]);
         assert!(prompt.contains("30 file(s)"));
         assert!(prompt.contains("file19.rs"));
         assert!(!prompt.contains("file20.rs"), "capped at {PROMPT_FILE_CAP}");

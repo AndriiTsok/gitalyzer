@@ -103,3 +103,8 @@ the system `git` (RFC 0004 R6), and the JSON payload.
 ## References
 
 - PRD §4.2; RFC 0001 R5–R6/R11; RFC 0003 R3–R4; RFC 0004 R4/R6.
+
+## Changelog
+
+- 2026-07-06 — Amended: the R5 base system prompt is overridable via
+  `write.system_prompt`; the R4 style clause is still appended after it.

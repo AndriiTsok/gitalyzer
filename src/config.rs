@@ -58,9 +58,12 @@ const KNOWN_KEYS: &[&str] = &[
     "analyze.batch_size",
     "analyze.concurrency",
     "analyze.max_patch_bytes",
+    "analyze.max_batch_bytes",
+    "analyze.system_prompt",
     "analyze.thresholds.needs_work",
     "analyze.thresholds.well_written",
     "write.style",
+    "write.system_prompt",
     "write.max_file_patch_bytes",
     "write.max_diff_bytes",
     "providers.anthropic.api_key",
@@ -124,6 +127,14 @@ pub struct AnalyzeSettings {
     /// Per-commit patch excerpt cap in bytes; `0` disables patch content
     /// entirely (RFC 0005 R3).
     pub max_patch_bytes: u64,
+    /// Hard byte ceiling per LLM request; batches are packed to stay under
+    /// it regardless of `batch_size`, so huge ranges cannot overflow a
+    /// model's context window (RFC 0005 R4, amended).
+    pub max_batch_bytes: u64,
+    /// Replace the built-in critique system prompt (RFC 0005 R2, amended);
+    /// `null` uses the built-in rubric. Structured output stays
+    /// schema-enforced regardless.
+    pub system_prompt: Option<String>,
     /// Report bucket thresholds (RFC 0005 R5).
     pub thresholds: Thresholds,
 }
@@ -135,6 +146,8 @@ impl Default for AnalyzeSettings {
             batch_size: 10,
             concurrency: 1,
             max_patch_bytes: 4096,
+            max_batch_bytes: 262_144,
+            system_prompt: None,
             thresholds: Thresholds::default(),
         }
     }
@@ -165,6 +178,9 @@ impl Default for Thresholds {
 pub struct WriteSettings {
     /// Suggested-message style (RFC 0006 R4).
     pub style: Style,
+    /// Replace the built-in suggestion system prompt (RFC 0006 R5, amended);
+    /// `null` uses the built-in one. The style clause (R4) is still appended.
+    pub system_prompt: Option<String>,
     /// Per-file staged patch cap in bytes (RFC 0006 R3).
     pub max_file_patch_bytes: u64,
     /// Total staged patch budget in bytes (RFC 0006 R3).
@@ -175,6 +191,7 @@ impl Default for WriteSettings {
     fn default() -> Self {
         Self {
             style: Style::Auto,
+            system_prompt: None,
             max_file_patch_bytes: 8192,
             max_diff_bytes: 65536,
         }

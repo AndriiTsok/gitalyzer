@@ -56,6 +56,10 @@ pub struct TaskSpec {
     pub user: String,
     /// JSON Schema of the expected result.
     pub schema: serde_json::Value,
+    /// Output-token budget hint; callers scale it with the amount of content
+    /// they expect back so large batches cannot be truncated mid-JSON.
+    /// `None` uses the adapter default.
+    pub max_output_tokens: Option<u32>,
 }
 
 /// Typed provider failures; messages are actionable (RFC 0003 R10).
@@ -147,6 +151,44 @@ pub enum ProviderError {
         /// Final validation error.
         detail: String,
     },
+    /// The request exceeded the model's context window.
+    #[error(
+        "the request exceeded the model's context window ({message}); lower \
+         analyze.batch_size / --batch-size or analyze.max_patch_bytes (for write: the \
+         write.* budgets), or pick a model with a larger context"
+    )]
+    ContextTooLarge {
+        /// Provider id.
+        provider: &'static str,
+        /// Message extracted from the error body.
+        message: String,
+    },
+    /// The model ran out of output tokens before completing the result.
+    #[error(
+        "provider `{provider}` ran out of output tokens before completing the result; \
+         lower analyze.batch_size / --batch-size so each request returns fewer items"
+    )]
+    OutputTruncated {
+        /// Provider id.
+        provider: &'static str,
+    },
+}
+
+/// Whether an HTTP 400/413 body describes a context-window overflow.
+pub(crate) fn is_context_overflow(status: u16, body: &str) -> bool {
+    if status != 400 && status != 413 {
+        return false;
+    }
+    let lowered = body.to_lowercase();
+    [
+        "context length",
+        "maximum context",
+        "prompt is too long",
+        "too many tokens",
+        "context window",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
 }
 
 /// The provider contract (RFC 0003 R2–R3): execute one structured task and
@@ -286,6 +328,7 @@ pub async fn run_task<T>(
     description: &'static str,
     system: &str,
     user: &str,
+    max_output_tokens: Option<u32>,
 ) -> Result<T, ProviderError>
 where
     T: DeserializeOwned + schemars::JsonSchema,
@@ -299,6 +342,7 @@ where
         system: system.to_owned(),
         user: user.to_owned(),
         schema,
+        max_output_tokens,
     };
 
     let mut last_error = None;
@@ -431,7 +475,7 @@ mod tests {
             serde_json::json!({"score": "not a number"}),
             serde_json::json!({"score": 7}),
         ]));
-        let payload: Payload = run_task(&provider, "t", "d", "system", "user")
+        let payload: Payload = run_task(&provider, "t", "d", "system", "user", None)
             .await
             .expect("repaired");
         assert_eq!(payload.score, 7);
@@ -443,7 +487,7 @@ mod tests {
             serde_json::json!({"score": "bad"}),
             serde_json::json!({"score": "still bad"}),
         ]));
-        let error = run_task::<Payload>(&provider, "t", "d", "system", "user")
+        let error = run_task::<Payload>(&provider, "t", "d", "system", "user", None)
             .await
             .expect_err("must fail");
         assert!(

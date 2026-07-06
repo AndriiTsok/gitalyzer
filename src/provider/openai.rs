@@ -10,7 +10,9 @@ use std::time::Duration;
 use serde_json::json;
 
 use super::retry::{RetryPolicy, send_with_retry};
-use super::{LlmProvider, OPENAI_ID, ProviderError, TaskSpec, api_error_message};
+use super::{
+    LlmProvider, OPENAI_ID, ProviderError, TaskSpec, api_error_message, is_context_overflow,
+};
 
 /// Thin client for the `OpenAI` Chat Completions API and compatible servers.
 pub struct OpenAiProvider {
@@ -68,6 +70,12 @@ impl OpenAiProvider {
 
     /// Map a non-success response to a typed, actionable error (RFC 0003 R10).
     fn map_error(&self, status: reqwest::StatusCode, body: &str) -> ProviderError {
+        if is_context_overflow(status.as_u16(), body) {
+            return ProviderError::ContextTooLarge {
+                provider: OPENAI_ID,
+                message: api_error_message(body),
+            };
+        }
         let message = api_error_message(body);
         match status.as_u16() {
             401 | 403 => ProviderError::Auth {
@@ -179,6 +187,19 @@ impl LlmProvider for OpenAiProvider {
                     provider: OPENAI_ID,
                     detail: format!("response is not JSON: {e}"),
                 })?;
+            // finish_reason "length" means the JSON was cut mid-stream;
+            // surface the real cause. No max token limit is sent for OpenAI:
+            // reasoning models spend output budget on hidden thinking, so
+            // capping it risks empty results.
+            if response
+                .pointer("/choices/0/finish_reason")
+                .and_then(|r| r.as_str())
+                == Some("length")
+            {
+                return Err(ProviderError::OutputTruncated {
+                    provider: OPENAI_ID,
+                });
+            }
             let content = response
                 .pointer("/choices/0/message/content")
                 .and_then(|c| c.as_str())

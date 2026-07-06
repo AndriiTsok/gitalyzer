@@ -6,12 +6,14 @@ use std::time::Duration;
 use serde_json::json;
 
 use super::retry::{RetryPolicy, send_with_retry};
-use super::{ANTHROPIC_ID, LlmProvider, ProviderError, TaskSpec, api_error_message};
+use super::{
+    ANTHROPIC_ID, LlmProvider, ProviderError, TaskSpec, api_error_message, is_context_overflow,
+};
 
 /// Anthropic Messages API version header value.
 const API_VERSION: &str = "2023-06-01";
-/// Generation budget per request; generous, since critique batches are large.
-const MAX_TOKENS: u32 = 8192;
+/// Default generation budget when the task carries no hint.
+const DEFAULT_MAX_TOKENS: u32 = 8192;
 
 /// Thin client for the Anthropic Messages API.
 pub struct AnthropicProvider {
@@ -60,6 +62,12 @@ impl AnthropicProvider {
 
     /// Map a non-success response to a typed, actionable error (RFC 0003 R10).
     fn map_error(&self, status: reqwest::StatusCode, body: &str) -> ProviderError {
+        if is_context_overflow(status.as_u16(), body) {
+            return ProviderError::ContextTooLarge {
+                provider: ANTHROPIC_ID,
+                message: api_error_message(body),
+            };
+        }
         let message = api_error_message(body);
         match status.as_u16() {
             401 | 403 => ProviderError::Auth {
@@ -97,7 +105,9 @@ impl LlmProvider for AnthropicProvider {
         let url = format!("{}/v1/messages", self.base_url);
         let body = json!({
             "model": self.model,
-            "max_tokens": MAX_TOKENS,
+            // Scaled by the caller with expected output volume so large
+            // batches cannot be truncated mid-JSON (RFC 0003, amended).
+            "max_tokens": task.max_output_tokens.unwrap_or(DEFAULT_MAX_TOKENS),
             "system": task.system,
             "messages": [{ "role": "user", "content": task.user }],
             "tools": [{
@@ -132,6 +142,13 @@ impl LlmProvider for AnthropicProvider {
                 provider: ANTHROPIC_ID,
                 detail: format!("response is not JSON: {e}"),
             })?;
+        // A max_tokens stop means the tool input was cut mid-JSON: surface
+        // the real cause instead of a confusing validation failure.
+        if response.pointer("/stop_reason").and_then(|r| r.as_str()) == Some("max_tokens") {
+            return Err(ProviderError::OutputTruncated {
+                provider: ANTHROPIC_ID,
+            });
+        }
         response
             .pointer("/content")
             .and_then(|content| content.as_array())

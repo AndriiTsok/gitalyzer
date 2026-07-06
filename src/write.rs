@@ -38,8 +38,13 @@ const GENERATED_DIRS: &[&str] = &["node_modules/", "vendor/", "dist/", "build/",
 /// Suffixes treated as generated/minified (RFC 0006 R3).
 const GENERATED_SUFFIXES: &[&str] = &[".min.js", ".min.css", ".map", ".lock"];
 
-/// The base system prompt (RFC 0006 R5); a style clause is appended (R4).
-const SYSTEM_PROMPT: &str = "\
+/// Output-token budget for a suggestion — small and fixed; suggestions are
+/// bounded by design.
+const OUTPUT_TOKENS: u32 = 2048;
+
+/// The default base system prompt (RFC 0006 R5); a style clause is appended
+/// (R4). Overridable via `write.system_prompt`.
+pub const DEFAULT_SYSTEM_PROMPT: &str = "\
 You are an expert developer writing a Git commit message for the staged changes
 provided by the user.
 
@@ -142,8 +147,13 @@ impl WriteSession {
             Style::Auto => repo.recent_subjects(STYLE_CONTEXT_SUBJECTS)?,
             Style::Conventional => Vec::new(),
         };
+        let base = settings
+            .write
+            .system_prompt
+            .as_deref()
+            .unwrap_or(DEFAULT_SYSTEM_PROMPT);
         let system = format!(
-            "{SYSTEM_PROMPT}\n\n{}",
+            "{base}\n\n{}",
             style_clause(settings.write.style, &subjects)
         );
         let user = build_context(&staged, settings.write.max_diff_bytes);
@@ -171,7 +181,15 @@ impl WriteSession {
                 prior.message()
             ),
         };
-        run_task::<Suggestion>(provider, TASK_NAME, TASK_DESCRIPTION, &self.system, &user).await
+        run_task::<Suggestion>(
+            provider,
+            TASK_NAME,
+            TASK_DESCRIPTION,
+            &self.system,
+            &user,
+            Some(OUTPUT_TOKENS),
+        )
+        .await
     }
 
     /// Build the JSON envelope for a suggestion (R10).
@@ -409,6 +427,26 @@ mod tests {
         assert!(
             !context.contains("+x"),
             "no patch content under a zero budget"
+        );
+    }
+
+    #[test]
+    fn system_prompt_override_keeps_the_style_clause() {
+        use crate::config::Settings;
+        let mut settings = Settings::default();
+        settings.write.system_prompt = Some("Custom base instructions.".into());
+        settings.write.style = Style::Conventional;
+        // Mirror WriteSession::prepare's assembly without needing a repo.
+        let base = settings
+            .write
+            .system_prompt
+            .as_deref()
+            .unwrap_or(DEFAULT_SYSTEM_PROMPT);
+        let system = format!("{base}\n\n{}", style_clause(settings.write.style, &[]));
+        assert!(system.starts_with("Custom base instructions."));
+        assert!(
+            system.contains("always use Conventional Commits"),
+            "style clause appended"
         );
     }
 
