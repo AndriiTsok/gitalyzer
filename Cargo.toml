@@ -11,9 +11,12 @@ anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
 config = { version = "0.15", default-features = false, features = ["yaml"] }
 gix = "0.85.0"
+reqwest = { version = "0.13.4", features = ["json"] }
+schemars = "1.2.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
@@ -21,6 +24,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
+wiremock = "0.6.5"
 
 [lints.rust]
 unsafe_code = "forbid"

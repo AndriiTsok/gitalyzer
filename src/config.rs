@@ -411,7 +411,9 @@ impl Settings {
     /// Semantic validation of the fully merged settings (RFC 0002 R8,
     /// RFC 0005 R5). Messages are actionable and name the offending key.
     pub fn validate(&self) -> Result<(), ConfigError> {
-        if !matches!(self.provider.as_str(), "anthropic" | "openai") {
+        // `mock` is the internal deterministic test provider (RFC 0007 R11);
+        // deliberately absent from the user-facing error message.
+        if !matches!(self.provider.as_str(), "anthropic" | "openai" | "mock") {
             return Err(ConfigError::Invalid(format!(
                 "provider: unknown id `{}` (expected `anthropic` or `openai`)",
                 self.provider
