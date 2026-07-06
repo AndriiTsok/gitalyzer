@@ -5,9 +5,11 @@ of every session. Keep it current as the project evolves.
 
 ## Project
 
-**Gitalyzer** — _(one-line description pending; to be filled from the requirements RFC)._
+**Gitalyzer** — an AI-powered terminal tool that analyzes Git commit message quality
+and helps developers write better commit messages.
 
-Status: **Requirements / RFC phase.** No application code exists yet. We are drafting
+Status: **Requirements / RFC phase.** No application code exists yet. Product
+requirements live in `docs/product.md` (the PRD). We are turning them into technical
 requirements and design as RFC documents under `docs/rfcs/` before implementation begins.
 
 ## Language & Toolchain
@@ -30,8 +32,10 @@ Do not jump ahead to implementation while requirements for that slice are still 
 ## Documentation
 
 - `docs/` is the home for all project documentation.
-- `docs/rfcs/` holds numbered RFCs (requirements + design). See `docs/rfcs/README.md`
-  for the process and `docs/rfcs/0000-template.md` for the template.
+- `docs/product.md` is the PRD: the *what* and *why* at product level, without deep
+  technical detail.
+- `docs/rfcs/` holds numbered RFCs (technical requirements + design). See
+  `docs/rfcs/README.md` for the process and `docs/rfcs/0000-template.md` for the template.
 - Every significant decision should be traceable to an RFC.
 
 ## Commit Conventions
