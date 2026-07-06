@@ -57,6 +57,10 @@ early keeps later RFCs and code aligned.
 - **R11.** A global `--output <path>` flag MUST write the rendered result to the
   given file instead of stdout; progress and errors stay on the terminal. Most useful
   with `--format json`. Per-mode semantics: RFCs 0005 and 0006.
+- **R12.** A global `--no-color` flag MUST force undecorated output; the `NO_COLOR`
+  environment variable is honored (RFC 0007 R3).
+- **R13.** A global, repeatable `-v/--verbose` flag controls diagnostic verbosity
+  (`-v` debug, `-vv` trace), backed by structured logging (RFC 0007 R5).
 
 ## Canonical shape
 
@@ -73,6 +77,8 @@ Global flags:
   --format <human|json>  Output format (default: human)
   --output <path>        Write the result to a file instead of stdout
   --config <path>        Use an explicit configuration file
+  --no-color             Force undecorated output (NO_COLOR is honored too)
+  -v, --verbose          Increase diagnostic verbosity (-v debug, -vv trace)
 
 Examples:
   gitalyzer analyze
@@ -108,3 +114,5 @@ Examples:
 - 2026-07-06 — Amended alongside RFC 0004 changes: `--url` accepts any Git transport;
   added `--branch <name>` (R4).
 - 2026-07-06 — Amended alongside RFC 0006: added `write --dry-run` (R5).
+- 2026-07-06 — Amended alongside RFC 0007: added `--no-color` (R12) and
+  `-v/--verbose` (R13).
