@@ -14,9 +14,10 @@ requirements and design as RFC documents under `docs/rfcs/` before implementatio
 
 ## Language & Toolchain
 
-- **Language:** Rust (edition 2021, toolchain 1.96+).
+- **Language:** Rust (edition 2024, MSRV 1.85, toolchain 1.96+).
 - Core libraries are chosen deliberately per feature and recorded in the relevant RFC
-  before adoption. Do not add dependencies ad hoc — propose them in a design doc first.
+  before adoption — the locked set lives in `docs/rfcs/0008-implementation-bootstrap.md`.
+  Do not add dependencies ad hoc — propose them in an RFC first.
 
 ## How We Work
 

@@ -38,3 +38,4 @@ for Gitalyzer. Nothing significant gets built until the relevant RFC is agreed o
 | [0005](0005-analysis-mode.md) | Analysis Mode | Accepted |
 | [0006](0006-write-mode.md) | Write Mode | Accepted |
 | [0007](0007-output-logging-testing.md) | Output, Logging & Testing | Accepted |
+| [0008](0008-implementation-bootstrap.md) | Implementation Bootstrap | Accepted |
