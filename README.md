@@ -179,6 +179,19 @@ Only ever to the provider you configured, and only this:
 API keys are redacted from all diagnostics. Nothing is stored server-side by
 Gitalyzer itself.
 
+## GitHub Actions
+
+The repository ships a manually triggered workflow
+([`.github/workflows/analyze.yml`](.github/workflows/analyze.yml)): open the
+**Actions** tab → *Commit Message Analysis* → **Run workflow**, optionally
+providing a Git `url` (empty analyzes this repository), `branch`, `count`,
+`from`, `provider`, `model`, and `batch_size`. The report is published on the
+run's summary page and attached as an artifact.
+
+Setup: add an `ANTHROPIC_API_KEY` repository secret (or `OPENAI_API_KEY` and
+run with `provider: openai`) under *Settings → Secrets and variables →
+Actions*.
+
 ## Diagnostics
 
 - `-v` (debug) / `-vv` (trace) — structured logs on stderr; trace includes

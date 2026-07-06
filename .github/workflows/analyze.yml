@@ -1,0 +1,130 @@
+# Manually triggered commit-message analysis.
+#
+# Run it from the Actions tab ("Run workflow"): leave `url` empty to analyze
+# this repository's own history, or point it at any public Git URL. The
+# report lands directly in the run's summary page and is also attached as an
+# artifact.
+#
+# Required repository secret: ANTHROPIC_API_KEY (or OPENAI_API_KEY when
+# running with provider=openai).
+
+name: Commit Message Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Git URL to analyze (https/git). Empty = this repository."
+        required: false
+        type: string
+      branch:
+        description: "Branch to analyze (only used together with url)"
+        required: false
+        type: string
+      count:
+        description: "Number of commits to analyze"
+        required: false
+        default: "50"
+        type: string
+      from:
+        description: "Start revision (sha, branch, tag) instead of HEAD"
+        required: false
+        type: string
+      provider:
+        description: "LLM provider"
+        required: false
+        default: anthropic
+        type: choice
+        options:
+          - anthropic
+          - openai
+      model:
+        description: "Model override (empty = provider default)"
+        required: false
+        type: string
+      batch_size:
+        description: "Commits per LLM request (0 = everything in one request)"
+        required: false
+        default: "10"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Secrets: the provider picks the one it needs; empty values are unset.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # Workflow inputs map onto gitalyzer's env convention; empty = unset.
+      GITALYZER_PROVIDER: ${{ inputs.provider }}
+      GITALYZER_MODEL: ${{ inputs.model }}
+      GITALYZER_ANALYZE__COUNT: ${{ inputs.count }}
+      GITALYZER_ANALYZE__BATCH_SIZE: ${{ inputs.batch_size }}
+
+    steps:
+      - name: Check out gitalyzer
+        uses: actions/checkout@v4
+        with:
+          # Full history when analyzing this repository itself; remote URLs
+          # are cloned by gitalyzer, so a shallow source checkout suffices.
+          fetch-depth: ${{ inputs.url == '' && '0' || '1' }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Run analysis
+        env:
+          TARGET_URL: ${{ inputs.url }}
+          TARGET_BRANCH: ${{ inputs.branch }}
+          TARGET_FROM: ${{ inputs.from }}
+        run: |
+          set -euo pipefail
+          args=(analyze --output report.txt)
+          if [ -n "$TARGET_URL" ]; then
+            args+=(--url "$TARGET_URL")
+            if [ -n "$TARGET_BRANCH" ]; then
+              args+=(--branch "$TARGET_BRANCH")
+            fi
+          fi
+          if [ -n "$TARGET_FROM" ]; then
+            args+=(--from "$TARGET_FROM")
+          fi
+          ./target/release/gitalyzer "${args[@]}"
+
+      - name: Publish the report to the run summary
+        if: always()
+        env:
+          TARGET_URL: ${{ inputs.url }}
+          TARGET_BRANCH: ${{ inputs.branch }}
+        run: |
+          {
+            echo "## 📊 Commit message analysis"
+            echo ""
+            echo "**Target:** ${TARGET_URL:-this repository}${TARGET_BRANCH:+ (branch \`$TARGET_BRANCH\`)}"
+            echo "**Commits:** ${GITALYZER_ANALYZE__COUNT} · **Provider:** ${GITALYZER_PROVIDER}${GITALYZER_MODEL:+ · **Model:** \`$GITALYZER_MODEL\`}"
+            echo ""
+            if [ -f report.txt ]; then
+              echo '```text'
+              # The summary hard-limits at 1 MiB; keep headroom.
+              head -c 900000 report.txt
+              echo '```'
+            else
+              echo "_No report was produced — the analysis failed; see the job log._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitalyzer-report
+          path: report.txt
+          if-no-files-found: ignore
