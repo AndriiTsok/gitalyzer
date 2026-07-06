@@ -49,6 +49,9 @@ early keeps later RFCs and code aligned.
 - **R9.** In human format, long-running steps (LLM calls, remote cloning) SHOULD show
   progress indication (spinner/step feedback — specified in RFC 0007).
 - **R10.** Exit codes: `0` success, `1` runtime failure, `2` CLI usage error.
+- **R11.** A global `--output <path>` flag MUST write the rendered result to the
+  given file instead of stdout; progress and errors stay on the terminal. Most useful
+  with `--format json`. Per-mode semantics: RFCs 0005 and 0006.
 
 ## Canonical shape
 
@@ -63,13 +66,14 @@ Global flags:
   --provider <id>        Override the configured LLM provider
   --model <name>         Override the configured model
   --format <human|json>  Output format (default: human)
+  --output <path>        Write the result to a file instead of stdout
   --config <path>        Use an explicit configuration file
 
 Examples:
   gitalyzer analyze
   gitalyzer analyze --url="https://github.com/example/project"
   gitalyzer analyze -n 100 --from 1a2b3c4
-  gitalyzer analyze --format json
+  gitalyzer analyze --format json --output report.json
   gitalyzer write
 ```
 
@@ -90,3 +94,7 @@ Examples:
 ## References
 
 - PRD: [`../product.md`](../product.md), §4.
+
+## Changelog
+
+- 2026-07-06 — Amended alongside RFC 0005: added `--output <path>` (R11).

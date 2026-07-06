@@ -162,7 +162,7 @@ The canonical CLI surface is specified in [RFC 0001](rfcs/0001-cli-surface.md).
 - Clear, structured, scannable terminal output: sections, separators, and emoji
   accents as shown in the examples above.
 - A machine-readable **JSON output mode** so results can be consumed programmatically
-  (scripting, CI, editor integrations).
+  (scripting, CI, editor integrations), printed to stdout or written to a file.
 - Progress feedback for long-running steps (e.g. "Analyzing last 50 commits...") —
   responses involve LLM calls and are never instantaneous.
 - Friendly, actionable error messages for the common failure cases: missing

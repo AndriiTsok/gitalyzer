@@ -35,3 +35,4 @@ for Gitalyzer. Nothing significant gets built until the relevant RFC is agreed o
 | [0002](0002-configuration.md) | Configuration | Accepted |
 | [0003](0003-llm-providers.md) | LLM Providers | Accepted |
 | [0004](0004-git-access.md) | Git Access | Accepted |
+| [0005](0005-analysis-mode.md) | Analysis Mode | Accepted |
