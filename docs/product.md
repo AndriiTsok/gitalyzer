@@ -42,7 +42,9 @@ Gitalyzer is a terminal application with two modes.
 - Analyzes commit messages from **any Git repository**.
 - Defaults to the **current repository** and the **last 50 commits**; the commit
   count and the starting commit are selectable.
-- Can analyze a **remote repository** instead, given its URL.
+- Can analyze a **remote repository** instead, given any Git URL (HTTPS, SSH, and
+  other Git transports) with a selectable branch — authenticating with the user's
+  existing git credentials.
 - For each reviewed commit, produces: a quality **score out of 10**, a concrete
   **critique** (what is wrong or what makes it good), and — for weak messages — a
   **better alternative**.

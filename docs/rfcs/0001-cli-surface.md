@@ -30,6 +30,10 @@ early keeps later RFCs and code aligned.
   walking backwards from `HEAD`.
 - **R4.** `analyze` MUST support flexible history selection:
   - `--url <git-url>` — analyze a remote repository instead of the current one;
+    accepts any Git transport (`https://`, `ssh://`, `git@host:path`, `git://`,
+    `file://`), authenticating with the user's existing git credentials (RFC 0004);
+  - `--branch <name>` — with `--url`, the branch to analyze (default: the remote's
+    default branch); using it without `--url` is a usage error (exit `2`);
   - `-n, --count <N>` — number of commits to analyze (default: 50);
   - `--from <revision>` — start walking from this commit instead of `HEAD`; accepts
     anything Git resolves (SHA, branch, tag, `HEAD~20`);
@@ -72,6 +76,7 @@ Global flags:
 Examples:
   gitalyzer analyze
   gitalyzer analyze --url="https://github.com/example/project"
+  gitalyzer analyze --url="git@github.com:example/project.git" --branch develop
   gitalyzer analyze -n 100 --from 1a2b3c4
   gitalyzer analyze --format json --output report.json
   gitalyzer write
@@ -98,3 +103,5 @@ Examples:
 ## Changelog
 
 - 2026-07-06 — Amended alongside RFC 0005: added `--output <path>` (R11).
+- 2026-07-06 — Amended alongside RFC 0004 changes: `--url` accepts any Git transport;
+  added `--branch <name>` (R4).

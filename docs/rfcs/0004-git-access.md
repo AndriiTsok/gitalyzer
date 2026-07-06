@@ -38,11 +38,14 @@ today, so that one operation delegates to `git` for full fidelity at trivial cos
   change. Cap sizes and prompt budgeting live in RFC 0005.
 - **R4.** Write mode reads staged changes via `gix`: summary stats plus the full
   staged patch (budgeting in RFC 0006). No staged changes is an actionable error.
-- **R5.** Remote analysis (`--url`) performs a **bare shallow clone** into a
-  temporary directory: depth = requested count + a small buffer, single branch
-  (the remote's default). If `--from`/`--count` exceed the shallow boundary, the
-  clone is deepened (or re-cloned with sufficient depth) automatically. The temporary
-  directory is removed on normal exit, error, and Ctrl-C (best effort on hard kill).
+- **R5.** Remote analysis (`--url`) accepts **any Git URL**, not just GitHub over
+  HTTPS: `https://`, `ssh://`, scp-style (`git@host:path.git`), `git://`, and
+  `file://`. It performs a **bare shallow clone** into a temporary directory:
+  depth = requested count + a small buffer, single branch — the branch named by
+  `--branch <name>` (RFC 0001), defaulting to the remote's default branch. If
+  `--from`/`--count` exceed the shallow boundary, the clone is deepened (or re-cloned
+  with sufficient depth) automatically. The temporary directory is removed on normal
+  exit, error, and Ctrl-C (best effort on hard kill).
 - **R6.** Commit creation (accepting in write mode) invokes the system `git commit`
   with the message on stdin, in the repository root — hooks, signing, and identity
   resolution all apply. Hook output is shown to the user; a missing `git` binary is
@@ -51,7 +54,13 @@ today, so that one operation delegates to `git` for full fidelity at trivial cos
 - **R7.** Analyze mode never mutates the local repository; remote clones are
   read-only throwaways.
 - **R8.** Failures are actionable, exit `1`: not inside a repository, unresolvable
-  `--from`, empty history, unreachable/invalid remote URL.
+  `--from`, unknown `--branch`, empty history, unreachable/invalid remote URL.
+- **R9.** Remote access authenticates with the **user's existing Git credentials**,
+  exactly as their own `git` would: SSH URLs use the user's SSH configuration (keys,
+  agent, `~/.ssh/config`); HTTPS URLs go through the configured git credential
+  helper chain. Gitalyzer never stores credentials of its own and never prompts
+  outside the standard git credential flow. Authentication failures produce an
+  actionable message pointing at the user's git auth setup.
 
 ## Alternatives considered
 
@@ -79,4 +88,9 @@ Final dependency set is locked in the implementation-bootstrap RFC.
 
 ## References
 
-- RFC 0001 R3–R5 (history selection, `--url`); RFC 0005; RFC 0006.
+- RFC 0001 R3–R5 (history selection, `--url`, `--branch`); RFC 0005; RFC 0006.
+
+## Changelog
+
+- 2026-07-06 — Amended: `--url` accepts any Git transport with `--branch` selection
+  (R5, R8), and remote access reuses the user's native git credentials (R9).
