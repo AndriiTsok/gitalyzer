@@ -1,0 +1,30 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+# Keep Cargo.lock for binaries/applications; remove this line if this becomes a library.
+# Cargo.lock
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Editor / IDE
+/.idea/
+/.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & local scratch
+*.log
+/tmp/
+/scratch/

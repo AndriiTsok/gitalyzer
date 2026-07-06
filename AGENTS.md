@@ -1,0 +1,56 @@
+# AGENTS.md
+
+Project instructions for AI coding agents. This file is loaded automatically at the start
+of every session. Keep it current as the project evolves.
+
+## Project
+
+**Gitalyzer** — _(one-line description pending; to be filled from the requirements RFC)._
+
+Status: **Requirements / RFC phase.** No application code exists yet. We are drafting
+requirements and design as RFC documents under `docs/rfcs/` before implementation begins.
+
+## Language & Toolchain
+
+- **Language:** Rust (edition 2021, toolchain 1.96+).
+- Core libraries are chosen deliberately per feature and recorded in the relevant RFC
+  before adoption. Do not add dependencies ad hoc — propose them in a design doc first.
+
+## How We Work
+
+We collaborate side by side. The flow is:
+
+1. **Requirements** — capture what the system must do as RFCs in `docs/rfcs/`.
+2. **Design** — record architecture and technical decisions as RFCs before coding.
+3. **Implement** — build incrementally, one reviewable slice at a time.
+4. **Document** — keep `docs/` in sync with the code as it lands.
+
+Do not jump ahead to implementation while requirements for that slice are still open.
+
+## Documentation
+
+- `docs/` is the home for all project documentation.
+- `docs/rfcs/` holds numbered RFCs (requirements + design). See `docs/rfcs/README.md`
+  for the process and `docs/rfcs/0000-template.md` for the template.
+- Every significant decision should be traceable to an RFC.
+
+## Commit Conventions
+
+- Use **Conventional Commits**: `type(scope): summary`.
+  - Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`, `ci`, `perf`, `style`.
+  - Example: `docs(rfc): add requirements RFC for repository analysis`
+- One logical change per commit. Keep the summary imperative and under ~72 chars.
+- Commit or push only when asked. Never commit secrets.
+
+## Code Standards
+
+- Write clean, idiomatic, well-documented Rust.
+- Public items carry `///` doc comments explaining intent, not restating the signature.
+- Prefer clarity over cleverness; match the style of surrounding code.
+- `cargo fmt` and `cargo clippy` must pass before a change is considered done.
+- Add tests alongside behavior; a change to product code has a runtime surface to verify.
+
+## Conventions Recap
+
+- Rust, Conventional Commits, RFC-driven requirements and design.
+- Documentation lives in `docs/`; requirements precede implementation.
