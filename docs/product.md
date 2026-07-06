@@ -40,7 +40,8 @@ Gitalyzer is a terminal application with two modes.
 ### 4.1 Analysis mode
 
 - Analyzes commit messages from **any Git repository**.
-- Defaults to the **current repository** and the **last 50 commits**.
+- Defaults to the **current repository** and the **last 50 commits**; the commit
+  count and the starting commit are selectable.
 - Can analyze a **remote repository** instead, given its URL.
 - For each reviewed commit, produces: a quality **score out of 10**, a concrete
   **critique** (what is wrong or what makes it good), and — for weak messages — a
@@ -52,7 +53,7 @@ Gitalyzer is a terminal application with two modes.
 Expected shape of an analysis session:
 
 ```text
-$ gitalyzer --analyze
+$ gitalyzer analyze
 
 Analyzing last 50 commits...
 
@@ -100,7 +101,7 @@ One-word commits: 12 (24%)
 Expected shape of an interactive session:
 
 ```text
-$ gitalyzer --write
+$ gitalyzer write
 
 Analyzing staged changes... (12 files changed, +247 -89 lines)
 
@@ -126,17 +127,22 @@ Press Enter to accept, or type your own message:
 
 ```text
 # Analyze the last 50 commits of the current repository
-gitalyzer --analyze
+gitalyzer analyze
 
 # Analyze the last 50 commits of a remote repository
-gitalyzer --analyze --url="https://github.com/example/project"
+gitalyzer analyze --url="https://github.com/example/project"
+
+# Analyze 100 commits starting from a specific commit
+gitalyzer analyze -n 100 --from 1a2b3c4
+
+# Machine-readable results for scripting and CI
+gitalyzer analyze --format json
 
 # Interactively write a commit message for staged changes
-gitalyzer --write
+gitalyzer write
 ```
 
-The exact CLI surface may be refined in the requirements RFC; the capabilities shown
-here are the product contract.
+The canonical CLI surface is specified in [RFC 0001](rfcs/0001-cli-surface.md).
 
 ## 5. LLM providers & configuration
 
@@ -155,7 +161,10 @@ here are the product contract.
 
 - Clear, structured, scannable terminal output: sections, separators, and emoji
   accents as shown in the examples above.
-- Progress feedback for long-running steps (e.g. "Analyzing last 50 commits...").
+- A machine-readable **JSON output mode** so results can be consumed programmatically
+  (scripting, CI, editor integrations).
+- Progress feedback for long-running steps (e.g. "Analyzing last 50 commits...") —
+  responses involve LLM calls and are never instantaneous.
 - Friendly, actionable error messages for the common failure cases: missing
   credentials, not inside a Git repository, nothing staged, unreachable remote URL.
 
@@ -175,7 +184,6 @@ To be resolved together in the requirements RFC before implementation:
 
 - Should accepting a suggestion in interactive mode create the commit directly, or
   only emit the message?
-- Should the number of analyzed commits (default 50) be configurable?
 - How should very large histories or very large staged diffs be handled?
 
 ## 10. Success criteria

@@ -31,4 +31,4 @@ for Gitalyzer. Nothing significant gets built until the relevant RFC is agreed o
 
 | RFC  | Title    | Status |
 | ---- | -------- | ------ |
-| —    | _None yet — the first requirements RFC will be added here._ | — |
+| [0001](0001-cli-surface.md) | CLI Surface | Accepted |
