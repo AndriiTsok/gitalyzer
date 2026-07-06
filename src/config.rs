@@ -36,6 +36,15 @@ const API_KEY_FALLBACKS: &[(&str, &str)] = &[
     ("openai", "OPENAI_API_KEY"),
 ];
 
+/// `GITALYZER_*` variables that are operational, not configuration — they
+/// must never reach the env layer (they would read as unknown config keys
+/// and warn, polluting even JSON-mode stderr, RFC 0007 R2).
+const RESERVED_ENV_VARS: &[&str] = &[
+    "GITALYZER_LOG",
+    "GITALYZER_LOG_FORMAT",
+    "GITALYZER_MOCK_SCRIPT",
+];
+
 /// Configuration keys understood by this version; anything else in the merged
 /// configuration produces a warning, not an error (RFC 0002 R8).
 const KNOWN_KEYS: &[&str] = &[
@@ -313,16 +322,22 @@ pub fn load(sources: &Sources) -> Result<Settings, ConfigError> {
                 .required(file.required),
         );
     }
+    // The env layer always runs off an explicit snapshot (injected by tests
+    // or collected here) so reserved operational variables can be stripped.
+    let mut snapshot: HashMap<String, String> = match &sources.env {
+        Some(injected) => injected.clone(),
+        None => env::vars().collect(),
+    };
+    snapshot.retain(|key, _| !RESERVED_ENV_VARS.contains(&key.as_str()));
+
     // `prefix_separator` must be pinned: with a nesting separator configured,
     // config-rs would otherwise expect `GITALYZER__…` instead of the RFC 0002
     // convention `GITALYZER_SECTION__KEY`.
-    let mut env_source = Environment::with_prefix(ENV_PREFIX)
+    let env_source = Environment::with_prefix(ENV_PREFIX)
         .prefix_separator("_")
         .separator(ENV_SEPARATOR)
-        .try_parsing(true);
-    if let Some(snapshot) = &sources.env {
-        env_source = env_source.source(Some(snapshot.clone()));
-    }
+        .try_parsing(true)
+        .source(Some(snapshot));
     let merged = builder.add_source(env_source).build()?;
 
     warn_unknown_keys(&merged);

@@ -101,11 +101,23 @@ fn unknown_provider_fails_validation_with_exit_one() {
 }
 
 #[test]
-fn analyze_reports_not_implemented_for_now() {
-    // Slice-1 honesty: the subcommand parses, config resolves, then we say so.
+fn analyze_outside_a_repository_fails_actionably() {
+    // RFC 0004 R8: the temp home is not a Git repository.
     let home = TempDir::new().expect("tempdir");
     gitalyzer(&home)
         .arg("analyze")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(contains("not inside a Git repository"));
+}
+
+#[test]
+fn write_reports_not_implemented_for_now() {
+    // Slice honesty: `write` parses and resolves config, then says so.
+    let home = TempDir::new().expect("tempdir");
+    gitalyzer(&home)
+        .arg("write")
         .assert()
         .failure()
         .code(1)

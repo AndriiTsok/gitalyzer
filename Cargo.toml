@@ -10,6 +10,7 @@ authors = ["Andrii Tsok <andrii@tsok.org>"]
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
 config = { version = "0.15", default-features = false, features = ["yaml"] }
+futures = "0.3.32"
 gix = "0.85.0"
 reqwest = { version = "0.13.4", features = ["json"] }
 schemars = "1.2.1"
@@ -22,6 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [dev-dependencies]
 assert_cmd = "2"
+insta = "1.48.0"
 predicates = "3"
 tempfile = "3"
 wiremock = "0.6.5"

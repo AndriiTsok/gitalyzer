@@ -1,0 +1,35 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💩 COMMITS THAT NEED WORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Commit: "wip"
+Score: 1/10
+Issue: No information about what's in progress
+Better: Describe what you're working on
+
+Commit: "fixed bug"
+Score: 2/10
+Issue: Too vague - which bug? What was the impact?
+Better: fix(auth): resolve token expiration handling
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💎 WELL-WRITTEN COMMITS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Commit: "feat(api): add Redis caching layer
+         - Implement cache for read endpoints
+         - Add TTL configuration"
+Score: 9/10
+Why it's good: Clear scope, specific changes, measurable impact
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 YOUR STATS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Average score: 4.5/10
+Vague commits: 2 (50%)
+One-word commits: 1 (25%)

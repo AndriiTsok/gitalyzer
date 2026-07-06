@@ -1,0 +1,115 @@
+---
+source: tests/render_snapshots.rs
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "mode": "analyze",
+  "repository": {
+    "source": "local",
+    "url": null
+  },
+  "range": {
+    "from": "HEAD",
+    "requested": 50,
+    "analyzed": 4
+  },
+  "commits": [
+    {
+      "sha": "dddd444000000000000000000000000000000000",
+      "short_sha": "dddd444",
+      "author": "Test Author <test@example.com>",
+      "date": "2026-01-01T00:00:00+00:00",
+      "message": "feat(api): add Redis caching layer\n- Implement cache for read endpoints\n- Add TTL configuration",
+      "files_changed": 2,
+      "insertions": 10,
+      "deletions": 3,
+      "score": 9,
+      "issue": null,
+      "better": null,
+      "why_good": "Clear scope, specific changes, measurable impact",
+      "tags": {
+        "vague": false,
+        "misleading": false,
+        "no_why": false
+      },
+      "one_word": false
+    },
+    {
+      "sha": "cccc333000000000000000000000000000000000",
+      "short_sha": "cccc333",
+      "author": "Test Author <test@example.com>",
+      "date": "2026-01-01T00:00:00+00:00",
+      "message": "update parser tests",
+      "files_changed": 2,
+      "insertions": 10,
+      "deletions": 3,
+      "score": 6,
+      "issue": null,
+      "better": null,
+      "why_good": null,
+      "tags": {
+        "vague": false,
+        "misleading": false,
+        "no_why": false
+      },
+      "one_word": false
+    },
+    {
+      "sha": "bbbb222000000000000000000000000000000000",
+      "short_sha": "bbbb222",
+      "author": "Test Author <test@example.com>",
+      "date": "2026-01-01T00:00:00+00:00",
+      "message": "fixed bug",
+      "files_changed": 2,
+      "insertions": 10,
+      "deletions": 3,
+      "score": 2,
+      "issue": "Too vague - which bug? What was the impact?",
+      "better": "fix(auth): resolve token expiration handling",
+      "why_good": null,
+      "tags": {
+        "vague": true,
+        "misleading": false,
+        "no_why": true
+      },
+      "one_word": false
+    },
+    {
+      "sha": "aaaa111000000000000000000000000000000000",
+      "short_sha": "aaaa111",
+      "author": "Test Author <test@example.com>",
+      "date": "2026-01-01T00:00:00+00:00",
+      "message": "wip",
+      "files_changed": 2,
+      "insertions": 10,
+      "deletions": 3,
+      "score": 1,
+      "issue": "No information about what's in progress",
+      "better": "Describe what you're working on",
+      "why_good": null,
+      "tags": {
+        "vague": true,
+        "misleading": false,
+        "no_why": true
+      },
+      "one_word": true
+    }
+  ],
+  "stats": {
+    "average_score": 4.5,
+    "vague": {
+      "count": 2,
+      "percent": 50
+    },
+    "one_word": {
+      "count": 1,
+      "percent": 25
+    }
+  },
+  "meta": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5",
+    "batches": 1
+  }
+}
