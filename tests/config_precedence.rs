@@ -123,6 +123,19 @@ fn nested_env_names_map_through_double_underscores() {
 }
 
 #[test]
+fn empty_environment_variables_count_as_unset() {
+    // CI systems export blank strings for optional parameters; those must
+    // not override lower layers with empty values.
+    let loaded = config::load(&sources(
+        &[],
+        &[("GITALYZER_MODEL", ""), ("GITALYZER_PROVIDER", "openai")],
+    ))
+    .expect("load");
+    assert_eq!(loaded.model, None, "empty GITALYZER_MODEL means unset");
+    assert_eq!(loaded.provider, "openai", "non-empty vars still apply");
+}
+
+#[test]
 fn standard_provider_variable_is_api_key_fallback() {
     let loaded =
         config::load(&sources(&[], &[("ANTHROPIC_API_KEY", "sk-standard")])).expect("load");

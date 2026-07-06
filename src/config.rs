@@ -335,11 +335,13 @@ pub fn load(sources: &Sources) -> Result<Settings, ConfigError> {
 
     // `prefix_separator` must be pinned: with a nesting separator configured,
     // config-rs would otherwise expect `GITALYZER__…` instead of the RFC 0002
-    // convention `GITALYZER_SECTION__KEY`.
+    // convention `GITALYZER_SECTION__KEY`. Empty variables count as unset —
+    // CI systems export blank strings for optional parameters.
     let env_source = Environment::with_prefix(ENV_PREFIX)
         .prefix_separator("_")
         .separator(ENV_SEPARATOR)
         .try_parsing(true)
+        .ignore_empty(true)
         .source(Some(snapshot));
     let merged = builder.add_source(env_source).build()?;
 
