@@ -56,7 +56,7 @@ pub fn clone_for_analysis(
     let tempdir = TempDir::with_prefix("gitalyzer-clone-").map_err(super::internal)?;
 
     let mut prepare = gix::prepare_clone_bare(url, tempdir.path())
-        .map_err(|error| classify(url, &error.to_string()))?;
+        .map_err(|error| classify(url, &error_chain(&error)))?;
     if let Some(name) = branch {
         prepare = prepare
             .with_ref_name(Some(name))
@@ -73,7 +73,7 @@ pub fn clone_for_analysis(
 
     let (repository, _outcome) = prepare
         .fetch_only(gix::progress::Discard, &SHOULD_INTERRUPT)
-        .map_err(|error| classify(url, &error.to_string()))?;
+        .map_err(|error| classify(url, &error_chain(&error)))?;
 
     let shallow = repository.is_shallow();
     Ok(RemoteClone {
@@ -81,6 +81,18 @@ pub fn clone_for_analysis(
         shallow,
         _tempdir: tempdir,
     })
+}
+
+/// Flatten an error and all its sources into one line — gix nests the
+/// telling details (auth failures especially) several levels deep.
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut parts = vec![error.to_string()];
+    let mut source = error.source();
+    while let Some(cause) = source {
+        parts.push(cause.to_string());
+        source = cause.source();
+    }
+    parts.join(": ")
 }
 
 /// Map a clone failure to an actionable error (RFC 0004 R8–R9): credential

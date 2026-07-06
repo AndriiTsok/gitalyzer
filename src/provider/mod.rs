@@ -371,11 +371,7 @@ where
     }
 
     Err(ProviderError::InvalidResult {
-        provider: match provider {
-            AnyProvider::Anthropic(_) => ANTHROPIC_ID,
-            AnyProvider::OpenAi(_) => OPENAI_ID,
-            AnyProvider::Mock(_) => MOCK_ID,
-        },
+        provider: provider.id(),
         detail: last_error.map_or_else(|| "unknown".to_owned(), |e| e.to_string()),
     })
 }

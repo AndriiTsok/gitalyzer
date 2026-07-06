@@ -224,20 +224,25 @@ async fn run_write(cli: &Cli, args: &WriteArgs, settings: &Settings) -> anyhow::
         );
     }
 
+    // Preconditions come BEFORE any LLM spend (RFC 0006 R1): a doomed
+    // interactive session must not pay for a suggestion first.
+    let interactive = stdin_is_interactive();
+    if cli.format == Format::Human && !interactive && !args.dry_run {
+        anyhow::bail!(
+            "`write` needs an interactive terminal; use --dry-run to print the suggestion \
+             or --format json for programmatic use (RFC 0006)"
+        );
+    }
+
+    let progress = Progress::stderr(cli.format == Format::Human);
+    progress.step("Generating suggestion...");
     let mut suggestion = session.suggest(&provider, None).await?;
+    progress.finish();
 
     // JSON mode is always non-interactive and never commits (RFC 0001 R6).
     if cli.format == Format::Json {
         let rendered = output::write_json(&session.report(&suggestion, &provider));
         return emit(cli, &rendered);
-    }
-
-    let interactive = stdin_is_interactive();
-    if !interactive && !args.dry_run {
-        anyhow::bail!(
-            "`write` needs an interactive terminal; use --dry-run to print the suggestion \
-             or --format json for programmatic use (RFC 0006)"
-        );
     }
 
     let decorated = stdout_decorated(cli);
@@ -264,7 +269,8 @@ async fn run_write(cli: &Cli, args: &WriteArgs, settings: &Settings) -> anyhow::
         let message = match input {
             "" => suggestion.message(),
             "r" | "R" => {
-                eprintln!("Regenerating...");
+                let progress = Progress::stderr(true);
+                progress.step("Regenerating...");
                 suggestion = session.suggest(&provider, Some(&suggestion)).await?;
                 continue;
             }
