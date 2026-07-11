@@ -3,6 +3,7 @@ name = "gitalyzer"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+license = "Apache-2.0"
 description = "AI-powered terminal tool that analyzes Git commit message quality and helps developers write better commits"
 authors = ["Andrii Tsok <andrii@tsok.org>"]
 
